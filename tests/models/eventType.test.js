@@ -8,11 +8,26 @@ describe("EventType ownership", () => {
     expect(schemaPath.options.immutable).toBe(true);
   });
 
-  it("still validates userId as a required ObjectId", () => {
-    const schemaPath = EventType.schema.path("userId");
+  it("keeps the original owner when an update attempts to overwrite userId", async () => {
+    const ownerId = new mongoose.Types.ObjectId();
+    const attackerId = new mongoose.Types.ObjectId();
 
-    expect(schemaPath.instance).toBe("ObjectId");
-    expect(schemaPath.options.required).toBe(true);
-    expect(mongoose.isValidObjectId(new mongoose.Types.ObjectId())).toBe(true);
+    const eventType = await EventType.create({
+      userId: ownerId,
+      title: "Consultation",
+      slug: "consultation-ownership-test",
+      duration: 30,
+    });
+
+    await EventType.findByIdAndUpdate(
+      eventType._id,
+      { userId: attackerId, title: "Updated consultation" },
+      { new: true, runValidators: true }
+    );
+
+    const updated = await EventType.findById(eventType._id).lean();
+
+    expect(updated.userId.toString()).toBe(ownerId.toString());
+    expect(updated.title).toBe("Updated consultation");
   });
 });
