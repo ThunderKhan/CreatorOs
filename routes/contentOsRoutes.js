@@ -26,6 +26,8 @@ const {
     contentOsAiValidator,
 } = require('../middleware/validators');
 
+const contentOsUpdateValidator = require('../middleware/validators/contentOsUpdateValidator');
+const contentOsConversionValidator = require('../middleware/validators/contentOsConversionValidator');
 const { aiGenerationLimiter } = require('../middleware/rateLimiters');
 
 /**
@@ -40,9 +42,9 @@ router.get('/', renderPage);
 router.get('/api/items', listItems);
 router.post('/api/items', contentOsItemValidator, createItem);
 router.get('/api/items/:id', getItemById);
-router.put('/api/items/:id', updateItem);
+router.put('/api/items/:id', contentOsUpdateValidator, updateItem);
 router.delete('/api/items/:id', deleteItem);
-router.post('/api/items/:id/convert', convertItem);
+router.post('/api/items/:id/convert', contentOsConversionValidator, convertItem);
 router.put('/api/items/:id/reschedule', rescheduleItem);
 router.put('/api/items/:id/performance', updatePerformance);
 router.post('/api/items/:id/comments', addComment);
