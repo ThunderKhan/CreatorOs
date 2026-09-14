@@ -15,7 +15,6 @@ const scheduledContentSchema = new mongoose.Schema(
         contentOsId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "ContentOs",
-            default: null,
         },
         caption: {
             type: String,
