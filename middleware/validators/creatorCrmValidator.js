@@ -1,6 +1,8 @@
 const { body } = require('express-validator');
 const { validateRequest, sanitizeNoSqlQuery } = require('./common');
 
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const validateBrand = validateRequest([
   body('companyName')
     .trim()
@@ -108,7 +110,16 @@ const validateMediaKit = validateRequest([
     .escape(),
 ]);
 
-const validateCrmQuery = sanitizeNoSqlQuery(['q', 'stage', 'category', 'status']);
+const sanitizeCrmQuery = sanitizeNoSqlQuery(['q', 'stage', 'category', 'status']);
+
+const validateCrmQuery = (req, res, next) => {
+  sanitizeCrmQuery(req, res, () => {
+    if (typeof req.query?.q === 'string') {
+      req.query.q = escapeRegex(req.query.q);
+    }
+    next();
+  });
+};
 
 module.exports = {
   validateBrand,
