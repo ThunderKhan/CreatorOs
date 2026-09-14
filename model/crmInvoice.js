@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { nextInvoiceNumber } = require("../utils/invoiceNumber");
 
 const crmInvoiceSchema = new mongoose.Schema(
   {
@@ -49,6 +50,24 @@ const crmInvoiceSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+crmInvoiceSchema.index(
+  { creatorId: 1, invoiceNumber: 1 },
+  { unique: true, sparse: true }
+);
+
+crmInvoiceSchema.pre("validate", async function allocateInvoiceNumber(next) {
+  if (!this.isNew || this.invoiceNumber) {
+    return next();
+  }
+
+  try {
+    this.invoiceNumber = await nextInvoiceNumber(this.creatorId);
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 
 module.exports =
   mongoose.models.CrmInvoice || mongoose.model("CrmInvoice", crmInvoiceSchema);
