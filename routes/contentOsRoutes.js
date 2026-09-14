@@ -26,6 +26,7 @@ const {
     contentOsAiValidator,
 } = require('../middleware/validators');
 
+const { runContentOsScheduleContext } = require('../utils/contentOsScheduleContext');
 const { aiGenerationLimiter } = require('../middleware/rateLimiters');
 
 /**
@@ -35,6 +36,10 @@ const { aiGenerationLimiter } = require('../middleware/rateLimiters');
  *     summary: Render Content OS main workspace
  */
 router.get('/', renderPage);
+
+// Keep Content OS -> ScheduledContent synchronization idempotent across item mutations.
+router.use('/api/items', runContentOsScheduleContext);
+router.use('/api/items/:id', runContentOsScheduleContext);
 
 // API Endpoints for Content OS Items
 router.get('/api/items', listItems);
