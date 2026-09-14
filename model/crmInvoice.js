@@ -57,7 +57,7 @@ crmInvoiceSchema.index(
 );
 
 crmInvoiceSchema.pre("validate", async function allocateInvoiceNumber(next) {
-  if (!this.isNew || this.invoiceNumber) {
+  if (!this.isNew) {
     return next();
   }
 
