@@ -19,19 +19,22 @@ function patchScheduleSync() {
 
   ScheduledContentModel[PATCHED] = true;
 
-  ContentOsModel.schema.post("save", function setContentOsContext() {
+  const originalContentCreate = ContentOsModel.create.bind(ContentOsModel);
+  ContentOsModel.create = async function createContentOsItem(...args) {
+    const result = await originalContentCreate(...args);
     const context = store.getStore();
-    if (context && this?._id) {
-      context.contentOsId = this._id.toString();
+    const createdItem = Array.isArray(result) ? result[0] : result;
+    if (context && createdItem?._id) {
+      context.contentOsId = createdItem._id.toString();
     }
-  });
+    return result;
+  };
 
-  const originalCreate = ScheduledContentModel.create.bind(ScheduledContentModel);
-
+  const originalScheduledCreate = ScheduledContentModel.create.bind(ScheduledContentModel);
   ScheduledContentModel.create = async function createScheduledContent(data, ...rest) {
     const contentOsId = getContentOsId();
     if (!contentOsId || !data?.userId) {
-      return originalCreate(data, ...rest);
+      return originalScheduledCreate(data, ...rest);
     }
 
     const document = { ...data, contentOsId };
