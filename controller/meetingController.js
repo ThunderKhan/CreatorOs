@@ -45,7 +45,7 @@ async function findCreatorByAliasOrName(identifier) {
 
 exports.getEventTypes = async (req, res) => {
   try {
-    const eventTypes = await EventType.find({ userId: req.user.id }).sort({ createdAt: -1 });
+    const eventTypes = await EventType.find({ userId: req.user._id }).sort({ createdAt: -1 });
     return res.status(200).json({ success: true, count: eventTypes.length, data: eventTypes });
   } catch (error) {
     return res.status(500).json({ success: false, message: publicErrorMessage(error) });
@@ -65,12 +65,12 @@ exports.createEventType = async (req, res) => {
 
     let slug = baseSlug;
     let count = 1;
-    while (await EventType.findOne({ userId: req.user.id, slug })) {
+    while (await EventType.findOne({ userId: req.user._id, slug })) {
       slug = `${baseSlug}-${count++}`;
     }
 
     const eventType = await EventType.create({
-      userId: req.user.id,
+      userId: req.user._id,
       title,
       slug,
       description: description || "",
@@ -100,7 +100,7 @@ exports.createEventType = async (req, res) => {
 exports.updateEventType = async (req, res) => {
   try {
     const { id } = req.params;
-    let eventType = await EventType.findOne({ _id: id, userId: req.user.id });
+    let eventType = await EventType.findOne({ _id: id, userId: req.user._id });
 
     if (!eventType) {
       return res.status(404).json({ success: false, message: "Event type not found" });
@@ -110,7 +110,7 @@ exports.updateEventType = async (req, res) => {
       let baseSlug = slugify(req.body.title);
       let slug = baseSlug;
       let count = 1;
-      while (await EventType.findOne({ userId: req.user.id, slug, _id: { $ne: id } })) {
+      while (await EventType.findOne({ userId: req.user._id, slug, _id: { $ne: id } })) {
         slug = `${baseSlug}-${count++}`;
       }
       req.body.slug = slug;
@@ -126,7 +126,7 @@ exports.updateEventType = async (req, res) => {
 exports.deleteEventType = async (req, res) => {
   try {
     const { id } = req.params;
-    const eventType = await EventType.findOneAndDelete({ _id: id, userId: req.user.id });
+    const eventType = await EventType.findOneAndDelete({ _id: id, userId: req.user._id });
 
     if (!eventType) {
       return res.status(404).json({ success: false, message: "Event type not found" });
@@ -144,7 +144,7 @@ exports.deleteEventType = async (req, res) => {
 
 exports.getUserBookings = async (req, res) => {
   try {
-    const bookings = await MeetingBooking.find({ userId: req.user.id })
+    const bookings = await MeetingBooking.find({ userId: req.user._id })
       .populate("eventTypeId", "title duration color price locationType")
       .sort({ startTime: 1 });
 
@@ -174,7 +174,7 @@ exports.cancelBooking = async (req, res) => {
     }
 
     // Check ownership if requested by logged in user
-    if (req.user && booking.userId.toString() !== req.user.id.toString()) {
+    if (req.user && booking.userId.toString() !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: "Unauthorized to cancel this booking" });
     }
 
@@ -195,9 +195,9 @@ exports.cancelBooking = async (req, res) => {
 
 exports.getGoogleCalendarStatus = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user._id);
     const tokens = user.googleCalendarTokens || {};
-    const authUrl = GoogleCalendarService.getAuthUrl(req.user.id.toString());
+    const authUrl = GoogleCalendarService.getAuthUrl(req.user._id.toString());
 
     return res.status(200).json({
       success: true,
@@ -212,12 +212,12 @@ exports.getGoogleCalendarStatus = async (req, res) => {
 
 exports.connectGoogleCalendar = async (req, res) => {
   try {
-    const authUrl = GoogleCalendarService.getAuthUrl(req.user.id.toString());
+    const authUrl = GoogleCalendarService.getAuthUrl(req.user._id.toString());
     if (authUrl) {
       return res.redirect(authUrl);
     }
     // If not configured, activate mock connection directly
-    await GoogleCalendarService.handleCallback("mock_code", req.user.id.toString());
+    await GoogleCalendarService.handleCallback("mock_code", req.user._id.toString());
     return res.redirect("/services/meetings?googleConnected=1");
   } catch (error) {
     return res.redirect("/services/meetings?error=" + encodeURIComponent(publicErrorMessage(error)));
@@ -242,7 +242,7 @@ exports.googleCalendarCallback = async (req, res) => {
 
 exports.disconnectGoogleCalendar = async (req, res) => {
   try {
-    await User.findByIdAndUpdate(req.user.id, {
+    await User.findByIdAndUpdate(req.user._id, {
       googleCalendarTokens: {
         accessToken: null,
         refreshToken: null,
@@ -429,9 +429,7 @@ exports.createBooking = async (req, res) => {
     // Sync with Google Calendar service
     const gCalResult = await GoogleCalendarService.createCalendarEvent(creator, {
       title: `${eventType.title} with ${attendeeName}`,
-      description: `Meeting arranged via CreatorOS\
-\
-Notes: ${attendeeNotes || "None"}`,
+      description: `Meeting arranged via CreatorOS\n\nNotes: ${attendeeNotes || "None"}`,
       startTime: start,
       endTime: end,
       attendeeName,

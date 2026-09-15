@@ -53,15 +53,6 @@ function generateCsrf(req, res, next) {
 // These endpoints must rely on their own verification (e.g. HMAC signatures) instead.
 const CSRF_EXEMPT_PATHS = new Set([
     '/api/instagram/webhook',
-]);
-
-/**
- * Middleware to verify the CSRF token on state-changing requests (POST, PUT, DELETE, PATCH).
- * Validates that the request includes a valid CSRF token matching the one in the secure cookie.
- * Blocks requests with missing or mismatched tokens with a 403 Forbidden response.
- */
-const CSRF_EXEMPT_PATHS = new Set([
-    '/api/instagram/webhook',
     '/api/billing/webhook',
 ]);
 
