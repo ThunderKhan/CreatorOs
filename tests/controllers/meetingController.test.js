@@ -5,7 +5,17 @@ const GoogleCalendarService = require("../../services/googleCalendarService");
 const meetingController = require("../../controller/meetingController");
 
 describe("Meeting Controller & Google Calendar Service", () => {
+  let originalUserFindById;
+  let originalUserFindByIdAndUpdate;
+
+  beforeAll(() => {
+    originalUserFindById = User.findById;
+    originalUserFindByIdAndUpdate = User.findByIdAndUpdate;
+  });
+
   afterEach(() => {
+    User.findById = originalUserFindById;
+    User.findByIdAndUpdate = originalUserFindByIdAndUpdate;
     jest.restoreAllMocks();
   });
 
@@ -145,7 +155,7 @@ describe("Meeting Controller & Google Calendar Service", () => {
     });
 
     it("uses the JWT user id for Google Calendar status", async () => {
-      jest.spyOn(User, "findById").mockResolvedValue({
+      User.findById = jest.fn().mockResolvedValue({
         googleCalendarTokens: { isConnected: true },
       });
       jest.spyOn(GoogleCalendarService, "getAuthUrl").mockReturnValue("https://calendar.example/auth");
@@ -168,7 +178,7 @@ describe("Meeting Controller & Google Calendar Service", () => {
     });
 
     it("uses the JWT user id when disconnecting Google Calendar", async () => {
-      jest.spyOn(User, "findByIdAndUpdate").mockResolvedValue({});
+      User.findByIdAndUpdate = jest.fn().mockResolvedValue({});
 
       await meetingController.disconnectGoogleCalendar(req, res);
 
