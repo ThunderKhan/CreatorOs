@@ -167,7 +167,11 @@ async function sendNotification(userId, payload) {
             deduplicationKey,
             metadata: { ...metadata, suppressionReason: "category_disabled" },
             deliveryLogs: [
-                { channel: "in_app", status: "skipped", error: `Category '${category}' is disabled in user preferences` },
+                {
+                    channel: "in_app",
+                    status: "skipped",
+                    error: `Category '${category}' is disabled in user preferences`,
+                },
             ],
         });
     }
@@ -176,7 +180,13 @@ async function sendNotification(userId, payload) {
     const dedupEnabled = prefs.deduplication?.enabled ?? true;
     const windowMinutes = prefs.deduplication?.windowMinutes ?? 15;
     if (dedupEnabled && deduplicationKey) {
-        const isDup = await isDuplicateNotification(userId, deduplicationKey, category, windowMinutes);
+        const isDup = await isDuplicateNotification(
+            userId,
+            deduplicationKey,
+            category,
+            windowMinutes
+        );
+
         if (isDup) {
             return Notification.create({
                 userId,
@@ -189,23 +199,36 @@ async function sendNotification(userId, payload) {
                 deduplicationKey,
                 metadata: { ...metadata, suppressionReason: "duplicate_suppressed" },
                 deliveryLogs: [
-                    { channel: "in_app", status: "skipped", error: "Duplicate notification suppressed by deduplication filter" },
+                    {
+                        channel: "in_app",
+                        status: "skipped",
+                        error: "Duplicate notification suppressed by deduplication filter",
+                    },
                 ],
             });
         }
     }
 
     // 3. Determine active channels based on preferences
-    const targetChannels = requestedChannels && requestedChannels.length > 0
-        ? requestedChannels
-        : ["in_app", "email", "push", "sms"];
+    const targetChannels =
+        requestedChannels && requestedChannels.length > 0
+            ? requestedChannels
+            : ["in_app", "email", "push", "sms"];
 
     const activeChannels = [];
 
-    if (targetChannels.includes("in_app") && prefs.channels.inApp) activeChannels.push("in_app");
-    if (targetChannels.includes("email") && prefs.channels.email) activeChannels.push("email");
-    if (targetChannels.includes("push") && prefs.channels.push) activeChannels.push("push");
-    if (targetChannels.includes("sms") && prefs.channels.sms) activeChannels.push("sms");
+    if (targetChannels.includes("in_app") && prefs.channels.inApp) {
+        activeChannels.push("in_app");
+    }
+    if (targetChannels.includes("email") && prefs.channels.email) {
+        activeChannels.push("email");
+    }
+    if (targetChannels.includes("push") && prefs.channels.push) {
+        activeChannels.push("push");
+    }
+    if (targetChannels.includes("sms") && prefs.channels.sms) {
+        activeChannels.push("sms");
+    }
 
     if (activeChannels.length === 0) {
         return Notification.create({
@@ -250,14 +273,17 @@ async function sendNotification(userId, payload) {
 
     // 5. Channel delivery handling
     if (finalStatus === "sent") {
-        deliveryLogs.push(...(await deliverToChannels(userId, activeChannels, title, message)));
+        deliveryLogs.push(
+            ...(await deliverToChannels(userId, activeChannels, title, message))
+        );
     } else {
         deliveryLogs.push({
             channel: "in_app",
             status: "delayed",
-            error: schedulingReason === "scheduled_for_future"
-                ? "Deferred until scheduledFor"
-                : "Deferred due to active Quiet Hours",
+            error:
+                schedulingReason === "scheduled_for_future"
+                    ? "Deferred until scheduledFor"
+                    : "Deferred due to active Quiet Hours",
         });
     }
 
@@ -299,7 +325,9 @@ async function deliverToChannels(userId, channels, title, message) {
                 if (user && user.email && isEmailTransportConfigured()) {
                     const transporter = createTransporter();
                     await transporter.sendMail({
-                        from: process.env.EMAIL_FROM || '"CreatorOS" <notifications@creatoros.com>',
+                        from:
+                            process.env.EMAIL_FROM ||
+                            '"CreatorOS" <notifications@creatoros.com>',
                         to: user.email,
                         subject: `[CreatorOS] ${title}`,
                         text: message,
@@ -319,7 +347,11 @@ async function deliverToChannels(userId, channels, title, message) {
                     });
                 }
             } catch (err) {
-                deliveryLogs.push({ channel: "email", status: "failed", error: err.message });
+                deliveryLogs.push({
+                    channel: "email",
+                    status: "failed",
+                    error: err.message,
+                });
             }
         } else if (channel === "push") {
             deliveryLogs.push({
@@ -407,7 +439,11 @@ async function trackEngagement(userId, notificationId, action) {
         update["engagement.clicked"] = true;
         update["engagement.clickedAt"] = new Date();
     }
-    return Notification.findOneAndUpdate({ _id: notificationId, userId }, update, { new: true });
+    return Notification.findOneAndUpdate(
+        { _id: notificationId, userId },
+        update,
+        { new: true }
+    );
 }
 
 /**
@@ -442,36 +478,104 @@ async function deleteNotification(userId, notificationId) {
 async function getNotificationAnalytics(userId) {
     const notifications = await Notification.find({ userId });
 
-    const totalSent = notifications.filter((n) => ["sent", "delivered"].includes(n.status)).length;
-    const totalRead = notifications.filter((n) => n.status === "read").length;
-    const totalClicked = notifications.filter((n) => n.engagement?.clicked).length;
+    const totalNotifications = notifications.length;
+    const totalSent = notifications.filter((n) =>
+        ["sent", "delivered", "read"].includes(n.status)
+    ).length;
+    const totalRead = notifications.filter(
+        (n) => n.readAt || n.status === "read"
+    ).length;
+    const totalClicked = notifications.filter(
+        (n) => n.engagement?.clicked
+    ).length;
+
+    const archivedCount = notifications.filter(
+        (n) => n.status === "archived"
+    ).length;
+    const suppressedCount = notifications.filter(
+        (n) => n.status === "suppressed"
+    ).length;
 
     const categoryStats = {};
     notifications.forEach((n) => {
         if (!categoryStats[n.category]) {
             categoryStats[n.category] = { count: 0, read: 0 };
         }
+
         categoryStats[n.category].count++;
-        if (n.status === "read") categoryStats[n.category].read++;
+
+        if (n.readAt || n.status === "read") {
+            categoryStats[n.category].read++;
+        }
     });
 
+    const channelStats = {
+        in_app: { total: 0, success: 0 },
+        email: { total: 0, success: 0 },
+        push: { total: 0, success: 0 },
+        sms: { total: 0, success: 0 },
+    };
+
     const deliveryStats = {};
+
     notifications.forEach((n) => {
-        n.deliveryLogs.forEach((log) => {
+        for (const log of n.deliveryLogs || []) {
+            if (channelStats[log.channel]) {
+                channelStats[log.channel].total++;
+
+                if (log.status === "success") {
+                    channelStats[log.channel].success++;
+                }
+            }
+
             if (!deliveryStats[log.channel]) {
                 deliveryStats[log.channel] = { sent: 0, failed: 0 };
             }
-            if (log.status === "success") deliveryStats[log.channel].sent++;
-            if (log.status === "failed") deliveryStats[log.channel].failed++;
-        });
+
+            if (log.status === "success") {
+                deliveryStats[log.channel].sent++;
+            }
+
+            if (log.status === "failed") {
+                deliveryStats[log.channel].failed++;
+            }
+        }
     });
 
+    const deliveryRate =
+        totalNotifications > 0
+            ? Math.round((totalSent / totalNotifications) * 100)
+            : 100;
+
+    const openRate =
+        totalSent > 0
+            ? Math.round((totalRead / totalSent) * 100)
+            : 0;
+
+    const clickRate =
+        totalRead > 0
+            ? Math.round((totalClicked / totalRead) * 100)
+            : 0;
+
     return {
+        totalNotifications,
+
+        // Current analytics fields.
+        sentCount: totalSent,
+        readCount: totalRead,
+        archivedCount,
+        suppressedCount,
+        clickedCount: totalClicked,
+        deliveryRate,
+        openRate,
+        clickRate,
+
+        // Backward-compatible field names.
         totalSent,
         totalRead,
         totalClicked,
-        openRate: totalSent ? ((totalRead / totalSent) * 100).toFixed(2) : "0.00",
-        clickRate: totalSent ? ((totalClicked / totalSent) * 100).toFixed(2) : "0.00",
+
+        channelStats,
         categoryStats,
         deliveryStats,
     };
