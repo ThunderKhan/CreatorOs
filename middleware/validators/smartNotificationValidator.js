@@ -4,19 +4,19 @@ const { validateRequest } = require('./common');
 const validatePreferences = validateRequest([
   body('channels.email')
     .optional()
-    .isBoolean()
+    .isBoolean({ strict: true })
     .withMessage('Email channel setting must be a boolean'),
   body('channels.sms')
     .optional()
-    .isBoolean()
+    .isBoolean({ strict: true })
     .withMessage('SMS channel setting must be a boolean'),
   body('channels.inApp')
     .optional()
-    .isBoolean()
+    .isBoolean({ strict: true })
     .withMessage('In-App channel setting must be a boolean'),
   body('channels.push')
     .optional()
-    .isBoolean()
+    .isBoolean({ strict: true })
     .withMessage('Push channel setting must be a boolean'),
   body('categories')
     .optional()
@@ -24,27 +24,27 @@ const validatePreferences = validateRequest([
     .withMessage('Categories must be an object'),
   body('categories.system')
     .optional()
-    .isBoolean()
+    .isBoolean({ strict: true })
     .withMessage('System category setting must be a boolean'),
   body('categories.engagement')
     .optional()
-    .isBoolean()
+    .isBoolean({ strict: true })
     .withMessage('Engagement category setting must be a boolean'),
   body('categories.content')
     .optional()
-    .isBoolean()
+    .isBoolean({ strict: true })
     .withMessage('Content category setting must be a boolean'),
   body('categories.analytics')
     .optional()
-    .isBoolean()
+    .isBoolean({ strict: true })
     .withMessage('Analytics category setting must be a boolean'),
   body('categories.marketing')
     .optional()
-    .isBoolean()
+    .isBoolean({ strict: true })
     .withMessage('Marketing category setting must be a boolean'),
   body('quietHours.enabled')
     .optional()
-    .isBoolean()
+    .isBoolean({ strict: true })
     .withMessage('Quiet hours enabled setting must be a boolean'),
   body('quietHours.startTime')
     .optional()
@@ -63,7 +63,7 @@ const validatePreferences = validateRequest([
     .withMessage('Quiet hours timezone cannot be empty'),
   body('intelligentScheduling.enabled')
     .optional()
-    .isBoolean()
+    .isBoolean({ strict: true })
     .withMessage('Intelligent scheduling enabled setting must be a boolean'),
   body('intelligentScheduling.preferredWindow')
     .optional()
@@ -72,7 +72,7 @@ const validatePreferences = validateRequest([
     .withMessage('Invalid intelligent scheduling preferred window'),
   body('deduplication.enabled')
     .optional()
-    .isBoolean()
+    .isBoolean({ strict: true })
     .withMessage('Deduplication enabled setting must be a boolean'),
   body('deduplication.windowMinutes')
     .optional()
@@ -91,7 +91,6 @@ const validateCreateNotification = validateRequest([
   body('message')
     .trim()
     .notEmpty()
-    .withMessage('Message is required')
     .isLength({ max: 1000 })
     .withMessage('Message cannot exceed 1000 characters')
     .escape(),
