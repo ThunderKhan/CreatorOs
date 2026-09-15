@@ -176,7 +176,7 @@ describe('Smart Notification Validators', () => {
     });
   });
 
-  describe('validateCreateNotification', () =>
+  describe('validateCreateNotification', () => {
     it('should pass with valid notification payload', async () => {
       const { req, res, next } = mockReqRes({
         method: 'POST',
