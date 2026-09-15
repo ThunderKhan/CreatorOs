@@ -140,7 +140,7 @@ describe("accountDeletionService", () => {
       paths: [`${userId}/image.png`],
     });
     expect(fs.rm).toHaveBeenCalledWith(
-      expect.stringMatching(/[\\/]test-vault[\\/]${userId.toString()}$/),
+      expect.stringMatching(new RegExp(`[\\\\/]test-vault[\\\\/]${userId.toString()}$`)),
       { recursive: true, force: true },
     );
 
