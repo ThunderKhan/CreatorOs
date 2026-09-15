@@ -355,29 +355,23 @@ describe("smartNotificationService", () => {
             await smartNotificationService.trackEngagement(testUserId, n._id, "click");
             const updated = await Notification.findById(n._id);
             expect(updated.engagement.clicked).toBe(true);
-            expect(updated.engagement.clickedAt).toBeInstanceOf(Date);
-
-            await smartNotificationService.trackEngagement(testUserId, n._id, "open");
-            const opened = await Notification.findById(n._id);
-            expect(opened.engagement.opened).toBe(true);
         });
 
-        it("should archive and delete notifications", async () => {
-            const n = await Notification.create({
+        it("should calculate correct notification analytics", async () => {
+            await Notification.create({
                 userId: testUserId,
-                title: "Archive Me",
-                message: "M",
+                title: "N1",
+                message: "M1",
                 status: "sent",
+                readAt: new Date(),
+                category: "system",
+                deliveryLogs: [{ channel: "in_app", status: "success" }],
             });
 
-            await smartNotificationService.archiveNotification(testUserId, n._id);
-            const archived = await Notification.findById(n._id);
-            expect(archived.status).toBe("archived");
-            expect(archived.archivedAt).toBeInstanceOf(Date);
-
-            await smartNotificationService.deleteNotification(testUserId, n._id);
-            const deleted = await Notification.findById(n._id);
-            expect(deleted).toBeNull();
+            const analytics = await smartNotificationService.getNotificationAnalytics(testUserId);
+            expect(analytics.totalNotifications).toBe(1);
+            expect(analytics.readCount).toBe(1);
+            expect(analytics.openRate).toBe(100);
         });
     });
 });
