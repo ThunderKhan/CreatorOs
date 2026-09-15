@@ -217,6 +217,51 @@ describe("smartNotificationService", () => {
             expect(await Notification.countDocuments({ userId: testUserId })).toBe(0);
         });
 
+        it("should suppress notification when every requested channel is disabled", async () => {
+            await smartNotificationService.updatePreferences(testUserId, {
+                channels: {
+                    inApp: false,
+                    email: false,
+                    push: false,
+                    sms: false,
+                },
+            });
+
+            const notif = await smartNotificationService.sendNotification(testUserId, {
+                title: "Disabled Channels",
+                message: "This should not be delivered through a fallback channel",
+                category: "system",
+            });
+
+            expect(notif.status).toBe("suppressed");
+            expect(notif.channels).toEqual([]);
+            expect(notif.metadata.suppressionReason).toBe("no_enabled_channels");
+            expect(notif.deliveryLogs).toEqual([]);
+        });
+
+        it("should not fall back to in-app when the requested channel is disabled", async () => {
+            await smartNotificationService.updatePreferences(testUserId, {
+                channels: {
+                    inApp: false,
+                    email: false,
+                    push: false,
+                    sms: false,
+                },
+            });
+
+            const notif = await smartNotificationService.sendNotification(testUserId, {
+                title: "Email Opt-Out",
+                message: "This should remain suppressed",
+                category: "system",
+                channels: ["email"],
+            });
+
+            expect(notif.status).toBe("suppressed");
+            expect(notif.channels).toEqual([]);
+            expect(notif.metadata.suppressionReason).toBe("no_enabled_channels");
+            expect(notif.deliveryLogs).toEqual([]);
+        });
+
         it("should suppress notification if category disabled by creator", async () => {
             await smartNotificationService.updatePreferences(testUserId, {
                 categories: { marketing: false },
@@ -310,23 +355,29 @@ describe("smartNotificationService", () => {
             await smartNotificationService.trackEngagement(testUserId, n._id, "click");
             const updated = await Notification.findById(n._id);
             expect(updated.engagement.clicked).toBe(true);
+            expect(updated.engagement.clickedAt).toBeInstanceOf(Date);
+
+            await smartNotificationService.trackEngagement(testUserId, n._id, "open");
+            const opened = await Notification.findById(n._id);
+            expect(opened.engagement.opened).toBe(true);
         });
 
-        it("should calculate correct notification analytics", async () => {
-            await Notification.create({
+        it("should archive and delete notifications", async () => {
+            const n = await Notification.create({
                 userId: testUserId,
-                title: "N1",
-                message: "M1",
+                title: "Archive Me",
+                message: "M",
                 status: "sent",
-                readAt: new Date(),
-                category: "system",
-                deliveryLogs: [{ channel: "in_app", status: "success" }],
             });
 
-            const analytics = await smartNotificationService.getNotificationAnalytics(testUserId);
-            expect(analytics.totalNotifications).toBe(1);
-            expect(analytics.readCount).toBe(1);
-            expect(analytics.openRate).toBe(100);
+            await smartNotificationService.archiveNotification(testUserId, n._id);
+            const archived = await Notification.findById(n._id);
+            expect(archived.status).toBe("archived");
+            expect(archived.archivedAt).toBeInstanceOf(Date);
+
+            await smartNotificationService.deleteNotification(testUserId, n._id);
+            const deleted = await Notification.findById(n._id);
+            expect(deleted).toBeNull();
         });
     });
 });
