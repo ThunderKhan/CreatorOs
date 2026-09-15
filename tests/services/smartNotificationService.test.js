@@ -166,6 +166,64 @@ describe("smartNotificationService", () => {
             expect(notif.deliveryLogs.length).toBeGreaterThan(0);
         });
 
+        it("should schedule a future notification without delivering it immediately", async () => {
+            const scheduledFor = new Date(Date.now() + 60 * 60 * 1000);
+
+            const notif = await smartNotificationService.sendNotification(testUserId, {
+                title: "Scheduled Alert",
+                message: "Deliver this later",
+                category: "system",
+                priority: "normal",
+                channels: ["in_app"],
+                scheduledFor,
+            });
+
+            expect(notif.status).toBe("scheduled");
+            expect(notif.sentAt).toBeNull();
+            expect(notif.scheduledFor.getTime()).toBe(scheduledFor.getTime());
+            expect(notif.deliveryLogs).toEqual([
+                {
+                    channel: "in_app",
+                    status: "delayed",
+                    error: "Deferred until scheduledFor",
+                },
+            ]);
+
+            const result = await smartNotificationService.processDueScheduledNotifications();
+            expect(result.processed).toBe(0);
+
+            const stillScheduled = await Notification.findById(notif._id);
+            expect(stillScheduled.status).toBe("scheduled");
+        });
+
+        it("should deliver an explicitly scheduled notification once it is due", async () => {
+            const scheduledFor = new Date(Date.now() - 60 * 1000);
+
+            const notif = await smartNotificationService.sendNotification(testUserId, {
+                title: "Due Alert",
+                message: "Deliver this now",
+                category: "system",
+                priority: "normal",
+                channels: ["in_app"],
+                scheduledFor,
+            });
+
+            expect(notif.status).toBe("sent");
+            expect(notif.sentAt).toBeInstanceOf(Date);
+        });
+
+        it("should reject an invalid scheduledFor value", async () => {
+            await expect(
+                smartNotificationService.sendNotification(testUserId, {
+                    title: "Invalid Schedule",
+                    message: "This should fail",
+                    scheduledFor: "not-a-date",
+                })
+            ).rejects.toThrow("scheduledFor must be a valid date");
+
+            expect(await Notification.countDocuments({ userId: testUserId })).toBe(0);
+        });
+
         it("should suppress notification if category disabled by creator", async () => {
             await smartNotificationService.updatePreferences(testUserId, {
                 categories: { marketing: false },
