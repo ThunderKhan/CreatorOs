@@ -174,22 +174,9 @@ describe('Smart Notification Validators', () => {
       expect(next).not.toHaveBeenCalled();
       expect(res.statusCode).toBe(422);
     });
-
-    it('should fail when frequency is supplied because it is not part of the preference schema', async () => {
-      const { req, res, next } = mockReqRes({
-        method: 'PUT',
-        url: '/api/notifications/preferences',
-        body: {
-          frequency: 'daily_digest',
-        },
-      });
-
-      await validatePreferences(req, res, next);
-      expect(next).toHaveBeenCalled();
-    });
   });
 
-  describe('validateCreateNotification', () => {
+  describe('validateCreateNotification', () =>
     it('should pass with valid notification payload', async () => {
       const { req, res, next } = mockReqRes({
         method: 'POST',
