@@ -167,12 +167,10 @@ class GoogleCalendarService {
       const data = await res.json();
 
       if (!res.ok) {
-        console.warn("Google Calendar API call warning, falling back to generated meet link:", data);
-        return {
-          eventId: "evt_" + crypto.randomBytes(8).toString("hex"),
-          meetingLink: locationType === "google_meet" ? generateMockMeetLink() : (bookingDetails.locationDetails || ""),
-          isMock: true,
-        };
+        const error = new Error(data.error?.message || data.error_description || `Google Calendar API request failed with status ${res.status}`);
+        error.code = "GOOGLE_CALENDAR_API_ERROR";
+        error.status = res.status;
+        throw error;
       }
 
       let meetLink = "";
@@ -192,11 +190,7 @@ class GoogleCalendarService {
       };
     } catch (err) {
       console.error("Error creating Google Calendar event:", err.message);
-      return {
-        eventId: "evt_" + crypto.randomBytes(8).toString("hex"),
-        meetingLink: locationType === "google_meet" ? generateMockMeetLink() : (bookingDetails.locationDetails || ""),
-        isMock: true,
-      };
+      throw err;
     }
   }
 
