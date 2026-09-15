@@ -226,20 +226,24 @@ describe("Meeting Controller & Google Calendar Service", () => {
         startTime: "2026-09-20T10:00:00.000Z",
       };
 
-      const findOneUser = jest.spyOn(User, "findOne").mockResolvedValueOnce(creator);
-      const findOneEventType = jest.spyOn(EventType, "findOne")
+      const originalFindOneUser = User.findOne;
+      const originalFindOneEventType = EventType.findOne;
+      const originalFindOneBooking = MeetingBooking.findOne;
+      const originalCreateBooking = MeetingBooking.create;
+      const originalCreateCalendarEvent = GoogleCalendarService.createCalendarEvent;
+
+      User.findOne = jest.fn().mockResolvedValue(creator);
+      EventType.findOne = jest.fn()
         .mockResolvedValueOnce(eventType)
         .mockResolvedValueOnce(null);
-      const findOneBooking = jest.spyOn(MeetingBooking, "findOne").mockResolvedValue(null);
-      const createBooking = jest.spyOn(MeetingBooking, "create");
-      const createCalendarEvent = jest
-        .spyOn(GoogleCalendarService, "createCalendarEvent")
-        .mockRejectedValue(providerError);
+      MeetingBooking.findOne = jest.fn().mockResolvedValue(null);
+      MeetingBooking.create = jest.fn();
+      GoogleCalendarService.createCalendarEvent = jest.fn().mockRejectedValue(providerError);
 
       await meetingController.createBooking(req, res);
 
-      expect(createCalendarEvent).toHaveBeenCalledTimes(1);
-      expect(createBooking).not.toHaveBeenCalled();
+      expect(GoogleCalendarService.createCalendarEvent).toHaveBeenCalledTimes(1);
+      expect(MeetingBooking.create).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -248,11 +252,11 @@ describe("Meeting Controller & Google Calendar Service", () => {
         })
       );
 
-      findOneUser.mockRestore();
-      findOneEventType.mockRestore();
-      findOneBooking.mockRestore();
-      createBooking.mockRestore();
-      createCalendarEvent.mockRestore();
+      User.findOne = originalFindOneUser;
+      EventType.findOne = originalFindOneEventType;
+      MeetingBooking.findOne = originalFindOneBooking;
+      MeetingBooking.create = originalCreateBooking;
+      GoogleCalendarService.createCalendarEvent = originalCreateCalendarEvent;
     });
   });
 });
