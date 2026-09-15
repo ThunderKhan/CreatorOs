@@ -91,7 +91,9 @@ async function deleteCreatorData(session, userId) {
         await applySession(Model.deleteMany({ creatorId: { $in: creatorIds } }), session);
     }
 
-    await applySession(Creator.deleteMany({ userId }), session);
+    for (const creatorId of creatorIds) {
+        await applySession(Creator.deleteOne({ _id: creatorId }), session);
+    }
 }
 
 async function removeCollaboratorReferences(session, userId) {
