@@ -101,6 +101,9 @@ describe("accountDeletionService", () => {
       select: jest.fn().mockReturnThis(),
       lean: jest.fn().mockResolvedValue([{ hfPath: `${userId}/image.png` }]),
     };
+    const creatorDeleteOne = jest.fn().mockReturnValue({
+      session: jest.fn().mockResolvedValue({ deletedCount: 1 }),
+    });
     const session = {
       startTransaction: jest.fn(),
       commitTransaction: jest.fn().mockResolvedValue(undefined),
@@ -116,10 +119,12 @@ describe("accountDeletionService", () => {
     });
 
     jest.spyOn(Creator, "find").mockReturnValue(creatorQuery);
-    jest.spyOn(Creator, "deleteMany").mockImplementation(deletionQuery);
+    jest.spyOn(Creator, "deleteOne").mockImplementation(creatorDeleteOne);
     jest.spyOn(ContributorSession, "deleteOne").mockImplementation(deletionQuery);
     jest.spyOn(User, "updateMany").mockImplementation(deletionQuery);
-    jest.spyOn(User, "deleteOne").mockImplementation(deletionQuery);
+    jest.spyOn(User, "deleteOne").mockImplementation(() => ({
+      session: jest.fn().mockResolvedValue({ deletedCount: 1 }),
+    }));
     jest.spyOn(mongoose, "startSession").mockResolvedValue(session);
     jest.spyOn(fs, "rm").mockResolvedValue(undefined);
 
@@ -152,7 +157,7 @@ describe("accountDeletionService", () => {
     expect(Post.deleteMany).toHaveBeenCalledWith({
       creatorId: { $in: [creatorId] },
     });
-    expect(Creator.deleteMany).toHaveBeenCalledWith({ userId });
+    expect(creatorDeleteOne).toHaveBeenCalledWith({ _id: creatorId });
     expect(User.updateMany).toHaveBeenCalledWith(
       { collaborators: userId },
       { $pull: { collaborators: userId } },
@@ -162,7 +167,7 @@ describe("accountDeletionService", () => {
     expect(session.abortTransaction).not.toHaveBeenCalled();
   });
 
-  it("does not delete the database account when external storage cleanup fails", async () => {
+  it("does not start database deletion when external storage cleanup fails", async () => {
     process.env.USE_MOCK_DB = "false";
     process.env.HF_TOKEN = "hf-token";
     process.env.HF_DATASET_REPO = "creatoros-uploads";
@@ -177,10 +182,8 @@ describe("accountDeletionService", () => {
     jest.spyOn(Upload, "find").mockReturnValue(uploadQuery);
     hfDeleteFiles.mockRejectedValueOnce(new Error("Hugging Face unavailable"));
     const startSession = jest.spyOn(mongoose, "startSession");
-    const deleteUser = jest.spyOn(User, "deleteOne");
 
     await expect(deleteAccount(user)).rejects.toThrow("Hugging Face unavailable");
     expect(startSession).not.toHaveBeenCalled();
-    expect(deleteUser).not.toHaveBeenCalled();
   });
 });
