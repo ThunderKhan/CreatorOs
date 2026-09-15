@@ -196,10 +196,11 @@ async function sendNotification(userId, payload) {
     }
 
     // 3. Determine active channels based on preferences
-    let activeChannels = [];
     const targetChannels = requestedChannels && requestedChannels.length > 0
         ? requestedChannels
         : ["in_app", "email", "push", "sms"];
+
+    const activeChannels = [];
 
     if (targetChannels.includes("in_app") && prefs.channels.inApp) activeChannels.push("in_app");
     if (targetChannels.includes("email") && prefs.channels.email) activeChannels.push("email");
@@ -207,7 +208,18 @@ async function sendNotification(userId, payload) {
     if (targetChannels.includes("sms") && prefs.channels.sms) activeChannels.push("sms");
 
     if (activeChannels.length === 0) {
-        activeChannels = ["in_app"]; // fallback to in_app if available
+        return Notification.create({
+            userId,
+            title,
+            message,
+            category,
+            priority,
+            channels: [],
+            status: "suppressed",
+            deduplicationKey,
+            metadata: { ...metadata, suppressionReason: "no_enabled_channels" },
+            deliveryLogs: [],
+        });
     }
 
     // 4. Determine whether the notification is explicitly scheduled or deferred by quiet hours.
@@ -313,13 +325,13 @@ async function deliverToChannels(userId, channels, title, message) {
             deliveryLogs.push({
                 channel: "push",
                 status: "unavailable",
-                error: "Push notifications are not currently supported",
+                error: "Push notification delivery is not configured",
             });
         } else if (channel === "sms") {
             deliveryLogs.push({
                 channel: "sms",
                 status: "unavailable",
-                error: "SMS notifications are not currently supported",
+                error: "SMS notification delivery is not configured",
             });
         }
     }
@@ -328,18 +340,156 @@ async function deliverToChannels(userId, channels, title, message) {
 }
 
 /**
- * Claim and deliver due scheduled notifications (quiet-hours deferrals, etc.).
- * Atomically moves status scheduled -> sending to avoid double-send across instances.
- * @param {Date} [now=new Date()]
- * @returns {Promise<{ processed: number, sent: number, failed: number }>}
+ * Get notification history for a user.
+ * @param {String|ObjectId} userId
+ * @param {Object} filters
+ * @returns {Promise<Object>}
  */
-async function processDueScheduledNotifications(now = new Date()) {
+async function getNotificationHistory(userId, filters = {}) {
+    const { page = 1, limit = 20, category, status } = filters;
+    const query = { userId };
+    if (category) query.category = category;
+    if (status) query.status = status;
+
+    const skip = (page - 1) * limit;
+    const [notifications, total] = await Promise.all([
+        Notification.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+        Notification.countDocuments(query),
+    ]);
+
+    return {
+        notifications,
+        total,
+        page,
+        pages: Math.ceil(total / limit),
+    };
+}
+
+/**
+ * Mark a notification as read.
+ * @param {String|ObjectId} userId
+ * @param {String|ObjectId} notificationId
+ * @returns {Promise<Document|null>}
+ */
+async function markAsRead(userId, notificationId) {
+    return Notification.findOneAndUpdate(
+        { _id: notificationId, userId },
+        { status: "read", readAt: new Date(), "engagement.readAt": new Date() },
+        { new: true }
+    );
+}
+
+/**
+ * Mark all notifications as read for a user.
+ * @param {String|ObjectId} userId
+ * @returns {Promise<Object>}
+ */
+async function markAllAsRead(userId) {
+    return Notification.updateMany(
+        { userId, status: { $in: ["sent", "delivered"] } },
+        { status: "read", readAt: new Date(), "engagement.readAt": new Date() }
+    );
+}
+
+/**
+ * Track engagement (open/click) for a notification.
+ * @param {String|ObjectId} userId
+ * @param {String|ObjectId} notificationId
+ * @param {String} action
+ * @returns {Promise<Document|null>}
+ */
+async function trackEngagement(userId, notificationId, action) {
+    const update = {};
+    if (action === "open") {
+        update["engagement.opened"] = true;
+        update["engagement.openedAt"] = new Date();
+    } else if (action === "click") {
+        update["engagement.clicked"] = true;
+        update["engagement.clickedAt"] = new Date();
+    }
+    return Notification.findOneAndUpdate({ _id: notificationId, userId }, update, { new: true });
+}
+
+/**
+ * Archive a notification.
+ * @param {String|ObjectId} userId
+ * @param {String|ObjectId} notificationId
+ * @returns {Promise<Document|null>}
+ */
+async function archiveNotification(userId, notificationId) {
+    return Notification.findOneAndUpdate(
+        { _id: notificationId, userId },
+        { status: "archived", archivedAt: new Date() },
+        { new: true }
+    );
+}
+
+/**
+ * Delete a notification.
+ * @param {String|ObjectId} userId
+ * @param {String|ObjectId} notificationId
+ * @returns {Promise<Document|null>}
+ */
+async function deleteNotification(userId, notificationId) {
+    return Notification.findOneAndDelete({ _id: notificationId, userId });
+}
+
+/**
+ * Get notification analytics for a user.
+ * @param {String|ObjectId} userId
+ * @returns {Promise<Object>}
+ */
+async function getNotificationAnalytics(userId) {
+    const notifications = await Notification.find({ userId });
+
+    const totalSent = notifications.filter((n) => ["sent", "delivered"].includes(n.status)).length;
+    const totalRead = notifications.filter((n) => n.status === "read").length;
+    const totalClicked = notifications.filter((n) => n.engagement?.clicked).length;
+
+    const categoryStats = {};
+    notifications.forEach((n) => {
+        if (!categoryStats[n.category]) {
+            categoryStats[n.category] = { count: 0, read: 0 };
+        }
+        categoryStats[n.category].count++;
+        if (n.status === "read") categoryStats[n.category].read++;
+    });
+
+    const deliveryStats = {};
+    notifications.forEach((n) => {
+        n.deliveryLogs.forEach((log) => {
+            if (!deliveryStats[log.channel]) {
+                deliveryStats[log.channel] = { sent: 0, failed: 0 };
+            }
+            if (log.status === "success") deliveryStats[log.channel].sent++;
+            if (log.status === "failed") deliveryStats[log.channel].failed++;
+        });
+    });
+
+    return {
+        totalSent,
+        totalRead,
+        totalClicked,
+        openRate: totalSent ? ((totalRead / totalSent) * 100).toFixed(2) : "0.00",
+        clickRate: totalSent ? ((totalClicked / totalSent) * 100).toFixed(2) : "0.00",
+        categoryStats,
+        deliveryStats,
+    };
+}
+
+/**
+ * Process due scheduled notifications. Claims each notification before delivery
+ * so concurrent workers cannot send the same notification simultaneously.
+ * @returns {Promise<Object>}
+ */
+async function processDueScheduledNotifications() {
+    const now = new Date();
     let processed = 0;
     let sent = 0;
     let failed = 0;
 
     while (true) {
-        const claimed = await Notification.findOneAndUpdate(
+        const notification = await Notification.findOneAndUpdate(
             {
                 status: "scheduled",
                 scheduledFor: { $lte: now },
@@ -347,58 +497,35 @@ async function processDueScheduledNotifications(now = new Date()) {
             {
                 $set: { status: "sending" },
             },
-            { new: true }
+            {
+                new: true,
+                sort: { scheduledFor: 1 },
+            }
         );
 
-        if (!claimed) break;
-
+        if (!notification) break;
         processed++;
 
         try {
-            const channels =
-                claimed.channels && claimed.channels.length > 0 ? claimed.channels : ["in_app"];
-            const deliveryLogs = await deliverToChannels(
-                claimed.userId,
-                channels,
-                claimed.title,
-                claimed.message
+            const logs = await deliverToChannels(
+                notification.userId,
+                notification.channels,
+                notification.title,
+                notification.message
             );
-
-            const hardFailures = deliveryLogs.filter((log) => log.status === "failed");
-            const anySuccess = deliveryLogs.some((log) => log.status === "success");
-
-            if (hardFailures.length > 0 && !anySuccess) {
-                await Notification.findByIdAndUpdate(claimed._id, {
-                    $set: {
-                        status: "failed",
-                        deliveryLogs,
-                    },
-                });
-                failed++;
-            } else {
-                await Notification.findByIdAndUpdate(claimed._id, {
-                    $set: {
-                        status: "sent",
-                        sentAt: new Date(),
-                        deliveryLogs,
-                    },
-                });
-                sent++;
-            }
+            notification.deliveryLogs.push(...logs);
+            notification.status = "sent";
+            notification.sentAt = new Date();
+            await notification.save();
+            sent++;
         } catch (err) {
-            await Notification.findByIdAndUpdate(claimed._id, {
-                $set: {
-                    status: "failed",
-                    deliveryLogs: [
-                        ...(claimed.deliveryLogs || []),
-                        {
-                            channel: "in_app",
-                            status: "failed",
-                            error: err.message,
-                        },
-                    ],
-                },
+            notification.status = "failed";
+            notification.deliveryLogs.push({
+                channel: "in_app",
+                status: "failed",
+                error: err.message,
             });
+            await notification.save();
             failed++;
         }
     }
@@ -406,282 +533,20 @@ async function processDueScheduledNotifications(now = new Date()) {
     return { processed, sent, failed };
 }
 
-/**
- * Fetch paginated notification history with filters.
- * @param {String|ObjectId} userId
- * @param {Object} options
- * @returns {Promise<Object>}
- */
-async function getNotificationHistory(userId, options = {}) {
-    const {
-        category,
-        channel,
-        status,
-        search,
-        page = 1,
-        limit = 20,
-    } = options;
-
-    const query = { userId };
-
-    if (category && category !== "all") {
-        query.category = category;
-    }
-    if (channel && channel !== "all") {
-        query.channels = channel;
-    }
-    if (status && status !== "all") {
-        if (status === "unread") {
-            query.readAt = null;
-            query.status = { $in: ["sent", "delivered", "scheduled", "pending"] };
-        } else if (status === "read") {
-            query.readAt = { $ne: null };
-        } else if (status === "archived") {
-            query.status = "archived";
-        } else {
-            query.status = status;
-        }
-    } else {
-        // By default omit archived unless specifically requested or status=all
-        if (status !== "all") {
-            query.status = { $ne: "archived" };
-        }
-    }
-
-    if (search) {
-        query.$or = [
-            { title: { $regex: search, $options: "i" } },
-            { message: { $regex: search, $options: "i" } },
-        ];
-    }
-
-    const skip = (Math.max(1, parseInt(page, 10)) - 1) * parseInt(limit);
-    const limitNum = parseInt(limit);
-
-    const [notifications, total, unreadCount] = await Promise.all([
-        Notification.find(query)
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limitNum),
-        Notification.countDocuments(query),
-        Notification.countDocuments({
-            userId,
-            readAt: null,
-            status: { $in: ["sent", "delivered", "pending"] },
-        }),
-    ]);
-
-    return {
-        notifications,
-        total,
-        page: parseInt(page),
-        totalPages: Math.ceil(total / limitNum) || 1,
-        unreadCount,
-    };
-}
-
-/**
- * Get unread notifications count for topbar badge.
- * @param {String|ObjectId} userId
- * @returns {Promise<Number>}
- */
-async function getUnreadCount(userId) {
-    return Notification.countDocuments({
-        userId,
-        readAt: null,
-        status: { $in: ["sent", "delivered", "pending"] },
-    });
-}
-
-/**
- * Mark notification as read.
- * @param {String|ObjectId} userId
- * @param {String|ObjectId} notificationId
- * @returns {Promise<Document>}
- */
-async function markAsRead(userId, notificationId) {
-    const notification = await Notification.findOne({ _id: notificationId, userId });
-    if (!notification) {
-        throw new Error("Notification not found");
-    }
-    notification.readAt = new Date();
-    notification.status = notification.status === "archived" ? "archived" : "read";
-    notification.engagement = notification.engagement || {};
-    notification.engagement.opened = true;
-    notification.engagement.readAt = new Date();
-    await notification.save();
-    return notification;
-}
-
-/**
- * Mark all notifications for a user as read.
- * @param {String|ObjectId} userId
- * @returns {Promise<Object>}
- */
-async function markAllAsRead(userId) {
-    const now = new Date();
-    const result = await Notification.updateMany(
-        { userId, readAt: null, status: { $ne: "archived" } },
-        {
-            $set: {
-                readAt: now,
-                status: "read",
-                "engagement.opened": true,
-                "engagement.readAt": now,
-            },
-        }
-    );
-    return result;
-}
-
-/**
- * Archive a notification.
- * @param {String|ObjectId} userId
- * @param {String|ObjectId} notificationId
- * @returns {Promise<Document>}
- */
-async function archiveNotification(userId, notificationId) {
-    const notification = await Notification.findOne({ _id: notificationId, userId });
-    if (!notification) {
-        throw new Error("Notification not found");
-    }
-    notification.status = "archived";
-    notification.archivedAt = new Date();
-    await notification.save();
-    return notification;
-}
-
-/**
- * Delete a notification.
- * @param {String|ObjectId} userId
- * @param {String|ObjectId} notificationId
- * @returns {Promise<Boolean>}
- */
-async function deleteNotification(userId, notificationId) {
-    const result = await Notification.deleteOne({ _id: notificationId, userId });
-    return result.deletedCount > 0;
-}
-
-/**
- * Track user engagement on a notification (open or click).
- * @param {String|ObjectId} userId
- * @param {String|ObjectId} notificationId
- * @param {String} action - "open" | "click"
- * @returns {Promise<Document>}
- */
-async function trackEngagement(userId, notificationId, action = "open") {
-    const notification = await Notification.findOne({ _id: notificationId, userId });
-    if (!notification) {
-        throw new Error("Notification not found");
-    }
-
-    if (!notification.engagement) {
-        notification.engagement = {};
-    }
-
-    const now = new Date();
-    if (action === "open") {
-        notification.engagement.opened = true;
-        notification.engagement.readAt = notification.engagement.readAt || now;
-        notification.readAt = notification.readAt || now;
-        if (notification.status !== "archived") notification.status = "read";
-    } else if (action === "click") {
-        notification.engagement.clicked = true;
-        notification.engagement.clickedAt = now;
-    }
-
-    await notification.save();
-    return notification;
-}
-
-/**
- * Generate analytics metrics for creator notifications.
- * @param {String|ObjectId} userId
- * @returns {Promise<Object>}
- */
-async function getNotificationAnalytics(userId) {
-    const allNotifications = await Notification.find({ userId });
-
-    const total = allNotifications.length;
-    let sentCount = 0;
-    let readCount = 0;
-    let archivedCount = 0;
-    let suppressedCount = 0;
-    let clickedCount = 0;
-
-    const channelStats = {
-        in_app: { total: 0, success: 0 },
-        email: { total: 0, success: 0 },
-        push: { total: 0, success: 0 },
-        sms: { total: 0, success: 0 },
-    };
-
-    const categoryStats = {
-        system: 0,
-        engagement: 0,
-        content: 0,
-        analytics: 0,
-        marketing: 0,
-    };
-
-    allNotifications.forEach((item) => {
-        if (item.status === "sent" || item.status === "delivered" || item.status === "read") {
-            sentCount++;
-        }
-        if (item.readAt || item.status === "read") readCount++;
-        if (item.status === "archived") archivedCount++;
-        if (item.status === "suppressed") suppressedCount++;
-        if (item.engagement?.clicked) clickedCount++;
-
-        if (categoryStats[item.category] !== undefined) {
-            categoryStats[item.category]++;
-        }
-
-        item.deliveryLogs.forEach((log) => {
-            if (channelStats[log.channel]) {
-                channelStats[log.channel].total++;
-                if (log.status === "success") {
-                    channelStats[log.channel].success++;
-                }
-            }
-        });
-    });
-
-    const deliveryRate = total > 0 ? Math.round((sentCount / total) * 100) : 100;
-    const openRate = sentCount > 0 ? Math.round((readCount / sentCount) * 100) : 0;
-    const clickRate = readCount > 0 ? Math.round((clickedCount / readCount) * 100) : 0;
-
-    return {
-        totalNotifications: total,
-        sentCount,
-        readCount,
-        archivedCount,
-        suppressedCount,
-        clickedCount,
-        deliveryRate,
-        openRate,
-        clickRate,
-        channelStats,
-        categoryStats,
-    };
-}
-
 module.exports = {
     getOrCreatePreferences,
     updatePreferences,
     isQuietHoursActive,
     getQuietHoursEndTime,
-    parseTimeToMinutes,
     isDuplicateNotification,
     sendNotification,
     deliverToChannels,
-    processDueScheduledNotifications,
     getNotificationHistory,
-    getUnreadCount,
     markAsRead,
     markAllAsRead,
+    trackEngagement,
     archiveNotification,
     deleteNotification,
-    trackEngagement,
     getNotificationAnalytics,
+    processDueScheduledNotifications,
 };
