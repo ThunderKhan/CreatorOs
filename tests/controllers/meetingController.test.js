@@ -74,24 +74,24 @@ describe("Meeting Controller & Google Calendar Service", () => {
 
     it("uses the JWT user id when listing event types", async () => {
       const sort = jest.fn().mockResolvedValue([]);
-      jest.spyOn(EventType, "find").mockReturnValue({ sort });
+      const find = jest.spyOn(EventType, "find").mockReturnValue({ sort });
 
       await meetingController.getEventTypes(req, res);
 
-      expect(EventType.find).toHaveBeenCalledWith({ userId });
+      expect(find).toHaveBeenCalledWith({ userId });
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
     it("uses the JWT user id when creating an event type", async () => {
-      jest.spyOn(EventType, "findOne").mockResolvedValue(null);
+      const findOne = jest.spyOn(EventType, "findOne").mockResolvedValue(null);
       const createdEventType = { _id: "event-1", userId, title: "Discovery Call" };
-      jest.spyOn(EventType, "create").mockResolvedValue(createdEventType);
+      const create = jest.spyOn(EventType, "create").mockResolvedValue(createdEventType);
       req.body = { title: "Discovery Call", duration: 30 };
 
       await meetingController.createEventType(req, res);
 
-      expect(EventType.findOne).toHaveBeenCalledWith({ userId, slug: "discovery-call" });
-      expect(EventType.create).toHaveBeenCalledWith(
+      expect(findOne).toHaveBeenCalledWith({ userId, slug: "discovery-call" });
+      expect(create).toHaveBeenCalledWith(
         expect.objectContaining({ userId, title: "Discovery Call", duration: 30 })
       );
       expect(res.status).toHaveBeenCalledWith(201);
@@ -99,15 +99,17 @@ describe("Meeting Controller & Google Calendar Service", () => {
 
     it("uses the JWT user id when updating an event type", async () => {
       const eventType = { _id: "event-1", userId, title: "Discovery Call" };
-      jest.spyOn(EventType, "findOne").mockResolvedValue(eventType);
-      jest.spyOn(EventType, "findByIdAndUpdate").mockResolvedValue({ ...eventType, description: "Updated" });
+      const findOne = jest.spyOn(EventType, "findOne").mockResolvedValue(eventType);
+      const findByIdAndUpdate = jest
+        .spyOn(EventType, "findByIdAndUpdate")
+        .mockResolvedValue({ ...eventType, description: "Updated" });
       req.params = { id: "event-1" };
       req.body = { description: "Updated" };
 
       await meetingController.updateEventType(req, res);
 
-      expect(EventType.findOne).toHaveBeenCalledWith({ _id: "event-1", userId });
-      expect(EventType.findByIdAndUpdate).toHaveBeenCalledWith(
+      expect(findOne).toHaveBeenCalledWith({ _id: "event-1", userId });
+      expect(findByIdAndUpdate).toHaveBeenCalledWith(
         "event-1",
         req.body,
         { new: true, runValidators: true }
@@ -116,23 +118,25 @@ describe("Meeting Controller & Google Calendar Service", () => {
     });
 
     it("uses the JWT user id when deleting an event type", async () => {
-      jest.spyOn(EventType, "findOneAndDelete").mockResolvedValue({ _id: "event-1", userId });
+      const findOneAndDelete = jest
+        .spyOn(EventType, "findOneAndDelete")
+        .mockResolvedValue({ _id: "event-1", userId });
       req.params = { id: "event-1" };
 
       await meetingController.deleteEventType(req, res);
 
-      expect(EventType.findOneAndDelete).toHaveBeenCalledWith({ _id: "event-1", userId });
+      expect(findOneAndDelete).toHaveBeenCalledWith({ _id: "event-1", userId });
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
     it("uses the JWT user id when listing bookings", async () => {
       const sort = jest.fn().mockResolvedValue([]);
       const populate = jest.fn().mockReturnValue({ sort });
-      jest.spyOn(MeetingBooking, "find").mockReturnValue({ populate });
+      const find = jest.spyOn(MeetingBooking, "find").mockReturnValue({ populate });
 
       await meetingController.getUserBookings(req, res);
 
-      expect(MeetingBooking.find).toHaveBeenCalledWith({ userId });
+      expect(find).toHaveBeenCalledWith({ userId });
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
@@ -144,51 +148,62 @@ describe("Meeting Controller & Google Calendar Service", () => {
         googleEventId: null,
         save: jest.fn().mockResolvedValue(undefined),
       };
-      jest.spyOn(MeetingBooking, "findById").mockResolvedValue(booking);
+      const findById = jest.spyOn(MeetingBooking, "findById").mockResolvedValue(booking);
       req.params = { id: "booking-1" };
       req.body = { cancelReason: "Schedule change" };
 
       await meetingController.cancelBooking(req, res);
 
+      expect(findById).toHaveBeenCalledWith("booking-1");
       expect(booking.save).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
     it("uses the JWT user id for Google Calendar status", async () => {
-      User.findById = jest.fn().mockResolvedValue({
+      const findById = jest.fn().mockResolvedValue({
         googleCalendarTokens: { isConnected: true },
       });
-      jest.spyOn(GoogleCalendarService, "getAuthUrl").mockReturnValue("https://calendar.example/auth");
+      const original = User.findById;
+      User.findById = findById;
+      const getAuthUrl = jest
+        .spyOn(GoogleCalendarService, "getAuthUrl")
+        .mockReturnValue("https://calendar.example/auth");
       jest.spyOn(GoogleCalendarService, "isConfigured").mockReturnValue(true);
 
       await meetingController.getGoogleCalendarStatus(req, res);
 
-      expect(User.findById).toHaveBeenCalledWith(userId);
-      expect(GoogleCalendarService.getAuthUrl).toHaveBeenCalledWith(userId);
+      expect(findById).toHaveBeenCalledWith(userId);
+      expect(getAuthUrl).toHaveBeenCalledWith(userId);
       expect(res.status).toHaveBeenCalledWith(200);
+      User.findById = original;
     });
 
     it("uses the JWT user id when connecting Google Calendar", async () => {
-      jest.spyOn(GoogleCalendarService, "getAuthUrl").mockReturnValue("https://calendar.example/auth");
+      const getAuthUrl = jest
+        .spyOn(GoogleCalendarService, "getAuthUrl")
+        .mockReturnValue("https://calendar.example/auth");
 
       await meetingController.connectGoogleCalendar(req, res);
 
-      expect(GoogleCalendarService.getAuthUrl).toHaveBeenCalledWith(userId);
+      expect(getAuthUrl).toHaveBeenCalledWith(userId);
       expect(res.redirect).toHaveBeenCalledWith("https://calendar.example/auth");
     });
 
     it("uses the JWT user id when disconnecting Google Calendar", async () => {
-      User.findByIdAndUpdate = jest.fn().mockResolvedValue({});
+      const findByIdAndUpdate = jest.fn().mockResolvedValue({});
+      const original = User.findByIdAndUpdate;
+      User.findByIdAndUpdate = findByIdAndUpdate;
 
       await meetingController.disconnectGoogleCalendar(req, res);
 
-      expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
+      expect(findByIdAndUpdate).toHaveBeenCalledWith(
         userId,
         expect.objectContaining({
           googleCalendarTokens: expect.objectContaining({ isConnected: false }),
         })
       );
       expect(res.status).toHaveBeenCalledWith(200);
+      User.findByIdAndUpdate = original;
     });
 
     it("should reject createEventType if title or duration is missing", async () => {
