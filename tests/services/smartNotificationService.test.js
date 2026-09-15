@@ -48,11 +48,9 @@ describe("smartNotificationService", () => {
         it("should detect active quiet hours correctly for overnight range", () => {
             const config = { enabled: true, startTime: "22:00", endTime: "08:00" };
 
-            // 23:00 UTC date
             const nightTime = new Date(Date.UTC(2026, 6, 30, 23, 0, 0));
             expect(smartNotificationService.isQuietHoursActive(config, nightTime)).toBe(true);
 
-            // 12:00 UTC date
             const dayTime = new Date(Date.UTC(2026, 6, 30, 12, 0, 0));
             expect(smartNotificationService.isQuietHoursActive(config, dayTime)).toBe(false);
         });
@@ -60,12 +58,10 @@ describe("smartNotificationService", () => {
         it("getQuietHoursEndTime uses endTime and handles overnight windows", () => {
             const config = { enabled: true, startTime: "22:00", endTime: "08:00" };
 
-            // Before midnight: end should be next calendar day at 08:00 UTC
             const lateNight = new Date(Date.UTC(2026, 6, 30, 23, 15, 0));
             const endLate = smartNotificationService.getQuietHoursEndTime(config, lateNight);
             expect(endLate.toISOString()).toBe("2026-07-31T08:00:00.000Z");
 
-            // After midnight still inside quiet hours: end is same day 08:00 UTC
             const earlyMorning = new Date(Date.UTC(2026, 6, 31, 2, 30, 0));
             const endEarly = smartNotificationService.getQuietHoursEndTime(config, earlyMorning);
             expect(endEarly.toISOString()).toBe("2026-07-31T08:00:00.000Z");
@@ -181,13 +177,10 @@ describe("smartNotificationService", () => {
             expect(notif.status).toBe("scheduled");
             expect(notif.sentAt).toBeNull();
             expect(notif.scheduledFor.getTime()).toBe(scheduledFor.getTime());
-            expect(notif.deliveryLogs).toEqual([
-                {
-                    channel: "in_app",
-                    status: "delayed",
-                    error: "Deferred until scheduledFor",
-                },
-            ]);
+            expect(notif.deliveryLogs).toHaveLength(1);
+            expect(notif.deliveryLogs[0].channel).toBe("in_app");
+            expect(notif.deliveryLogs[0].status).toBe("delayed");
+            expect(notif.deliveryLogs[0].error).toBe("Deferred until scheduledFor");
 
             const result = await smartNotificationService.processDueScheduledNotifications();
             expect(result.processed).toBe(0);
