@@ -104,6 +104,12 @@ describe("accountDeletionService", () => {
     const creatorDeleteOne = jest.fn().mockReturnValue({
       session: jest.fn().mockResolvedValue({ deletedCount: 1 }),
     });
+    const userUpdateMany = jest.fn().mockReturnValue({
+      session: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    });
+    const userDeleteOne = jest.fn().mockReturnValue({
+      session: jest.fn().mockResolvedValue({ deletedCount: 1 }),
+    });
     const session = {
       startTransaction: jest.fn(),
       commitTransaction: jest.fn().mockResolvedValue(undefined),
@@ -119,12 +125,10 @@ describe("accountDeletionService", () => {
     });
 
     jest.spyOn(Creator, "find").mockReturnValue(creatorQuery);
-    jest.spyOn(Creator, "deleteOne").mockImplementation(creatorDeleteOne);
+    jest.spyOn(mongoose.models.Creator, "deleteOne").mockImplementation(creatorDeleteOne);
     jest.spyOn(ContributorSession, "deleteOne").mockImplementation(deletionQuery);
-    jest.spyOn(User, "updateMany").mockImplementation(deletionQuery);
-    jest.spyOn(User, "deleteOne").mockImplementation(() => ({
-      session: jest.fn().mockResolvedValue({ deletedCount: 1 }),
-    }));
+    jest.spyOn(mongoose.models.User, "updateMany").mockImplementation(userUpdateMany);
+    jest.spyOn(mongoose.models.User, "deleteOne").mockImplementation(userDeleteOne);
     jest.spyOn(mongoose, "startSession").mockResolvedValue(session);
     jest.spyOn(fs, "rm").mockResolvedValue(undefined);
 
@@ -158,11 +162,11 @@ describe("accountDeletionService", () => {
       creatorId: { $in: [creatorId] },
     });
     expect(creatorDeleteOne).toHaveBeenCalledWith({ _id: creatorId });
-    expect(User.updateMany).toHaveBeenCalledWith(
+    expect(userUpdateMany).toHaveBeenCalledWith(
       { collaborators: userId },
       { $pull: { collaborators: userId } },
     );
-    expect(User.deleteOne).toHaveBeenCalledWith({ _id: userId });
+    expect(userDeleteOne).toHaveBeenCalledWith({ _id: userId });
     expect(session.commitTransaction).toHaveBeenCalledTimes(1);
     expect(session.abortTransaction).not.toHaveBeenCalled();
   });
