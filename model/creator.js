@@ -1,4 +1,8 @@
 const mongoose = require("mongoose");
+const {
+    encryptSecret,
+    decryptSecret,
+} = require("../services/tokenEncryption");
 
 /**
  * @schema creatorSchema
@@ -64,6 +68,8 @@ links: [
         accessToken: {
             type: String,
             default: "",
+            set: encryptSecret,
+            get: decryptSecret,
         },
         profileUrl: {
             type: String,
@@ -75,7 +81,21 @@ links: [
             type: Date,
         },
     },
-    { timestamps: true }
+    {
+        timestamps: true,
+        toJSON: {
+            getters: true,
+            transform: (_doc, ret) => {
+                delete ret.accessToken;
+            },
+        },
+        toObject: {
+            getters: true,
+            transform: (_doc, ret) => {
+                delete ret.accessToken;
+            },
+        },
+    }
 );
 
 const MongooseCreatorModel = mongoose.models.Creator || mongoose.model("Creator", creatorSchema);
