@@ -89,6 +89,7 @@ function createRedisConnection(label) {
     lazyConnect: true,
   });
 
+  // Add listeners for Redis connection events to improve observability.
   connection.on("error", (err) => {
     console.error(`❌ Redis Connection Error (${label}):`, err.message);
   });
@@ -96,11 +97,16 @@ function createRedisConnection(label) {
   return connection;
 }
 
+// Initialize BullMQ worker and queue if a standard Redis URI is provided.
+// Queue and Worker must use separate sockets: workers issue blocking commands
+// (BRPOP/BLPOP) that starve shared connections used for queue.add().
 if (REDIS_URI) {
   const queueConnection = createRedisConnection("dm-queue");
 
+  // Create the Queue only when Redis is explicitly configured.
   dmQueue = new Queue("dm-automation-queue", { connection: queueConnection });
 
+  // Create the Worker only when Redis is available and not on Vercel.
   if (process.env.VERCEL === "1") {
     console.warn(
       "📦 DM Worker disabled on Vercel to prevent hanging Redis connections. Use Vercel Cron/Webhooks instead.",
@@ -116,6 +122,7 @@ if (REDIS_URI) {
         console.log(`[Worker] Processing job ${job.id} for sender ${senderId}`);
 
         try {
+          // Resolve which creator owns this Instagram account
           const creator = await Creator.findOne({
             platform: "instagram",
             platformId: recipientId,
@@ -127,6 +134,7 @@ if (REDIS_URI) {
             return { skipped: true, reason: "unknown_creator" };
           }
 
+          // Find an active trigger whose keyword appears in the message
           const triggers = await DmTrigger.find({
             creatorId: creator.userId,
             isActive: true,
@@ -201,4 +209,4 @@ if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
   console.log("📦 Upstash Redis REST client configured.");
 }
 
-module.exports = { dmQueue, sendInstagramDM };
+module.exports = { dmQueue, dmWorker, sendInstagramDM };
