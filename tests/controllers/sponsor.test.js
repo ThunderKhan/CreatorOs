@@ -72,7 +72,7 @@ describe("Sponsor controller ownership", () => {
 
     expect(Sponsor.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: "sponsor-id", creatorId: userId },
-      { companyName: "Acme" },
+      { $set: { companyName: "Acme" } },
       { new: true, runValidators: true }
     );
     expect(res.json).toHaveBeenCalledWith({
