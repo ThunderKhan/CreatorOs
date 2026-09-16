@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
-    "build": "npm run build:css && node --check index.js && node --check controller/auth.js && node --check routes/auth.js && node --check model/user.js && node --check model/notification.js && node --check controller/smartNotificationController.js && node --check routes/smartNotificationRoutes.js && node --check workers/contentPublishWorker.js && node --check services/dmQueueService.js && node --check controller/meetingController.js && node --check routes/meetingRoutes.js && node --check model/eventType.js && node --check model/meetingBooking.js && node --check services/googleCalendarService.js && node --check model/bioProfile.js && node --check routes/health.js && node --check public/js/sponsorshipMatchmaker.js && node --check controller/sponsorshipMatchmakerController.js && node --check routes/creatorCrmRoutes.js",
+    "build": "npm run build:css && node --check index.js && node --check controller/auth.js && node --check routes/auth.js && node --check model/user.js && node --check notification.js && node --check controller/smartNotificationController.js && node --check routes/smartNotificationRoutes.js && node --check workers/contentPublishWorker.js && node --check services/dmQueueService.js && node --check controller/meetingController.js && node --check routes/meetingRoutes.js && node --check model/eventType.js && node --check model/meetingBooking.js && node --check services/googleCalendarService.js && node --check model/bioProfile.js && node --check routes/health.js && node --check public/js/sponsorshipMatchmaker.js && node --check controller/sponsorshipMatchmakerController.js && node --check routes/creatorCrmRoutes.js",
     "seed:test-user": "node scripts/seedTestUser.js",
     "build:css": "tailwindcss -i ./public/css/input.css -o ./public/css/style.css --minify",
     "watch:css": "tailwindcss -i ./public/css/input.css -o ./public/css/style.css --watch",
@@ -49,6 +49,7 @@
     "qrcode": "^1.5.4",
     "qrcode-svg": "^1.1.0",
     "rate-limit-mongo": "^2.3.2",
+    "sharp": "^0.35.4",
     "shortid": "^2.2.17",
     "swagger-jsdoc": "^6.3.0",
     "swagger-ui-express": "^5.0.1",
