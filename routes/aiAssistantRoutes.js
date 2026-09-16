@@ -22,6 +22,11 @@ const {
 // Render Assistant Page
 router.get("/", protect, renderAssistantView);
 
+// Sponsorship Matchmaker
+router.get("/sponsorship-matchmaker", protect, (req, res) => {
+  res.render("sponsorship-matchmaker");
+});
+
 // Chat endpoints
 router.post("/api/chat", protect, aiGenerationLimiter, validateChatRequest, sendMessage);
 router.get("/api/chats", protect, getChats);
