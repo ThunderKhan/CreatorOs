@@ -25,7 +25,6 @@ describe('URL Controller Endpoints', () => {
             .set(csrfHeader)
             .send({ email: 'test@local.com', password: 'Password123!' });
         
-        // Extract the auth token cookie if present
         const setCookie = res.headers['set-cookie'];
         if (setCookie) {
             authCookie = setCookie.find(c => c.startsWith('token='));
@@ -38,15 +37,10 @@ describe('URL Controller Endpoints', () => {
             .set(csrfHeader)
             .send({ redirectUrl: 'https://example.com/test' });
         
-        if (authCookie) {
-            req.set('Cookie', [csrfCookie, authCookie]);
-        } else {
-            req.set('Cookie', [csrfCookie]);
-        }
+        if (authCookie) req.set('Cookie', [csrfCookie, authCookie]);
+        else req.set('Cookie', [csrfCookie]);
 
         const res = await req;
-        // Depending on auth middleware, might be 401 if cookie extraction failed, 
-        // but due to mock mode it should pass or fail gracefully.
         expect([201, 302, 401]).toContain(res.statusCode);
         
         if (res.statusCode === 201) {
@@ -59,14 +53,10 @@ describe('URL Controller Endpoints', () => {
             .get('/api/urls/')
             .set(csrfHeader);
 
-        if (authCookie) {
-            req.set('Cookie', [csrfCookie, authCookie]);
-        } else {
-            req.set('Cookie', [csrfCookie]);
-        }
+        if (authCookie) req.set('Cookie', [csrfCookie, authCookie]);
+        else req.set('Cookie', [csrfCookie]);
 
         const res = await req;
-        // Must NOT crash with 500 - listForUser must be callable
         expect(res.statusCode).not.toEqual(500);
         expect([200, 302, 401]).toContain(res.statusCode);
     });
@@ -77,38 +67,27 @@ describe('URL Controller Endpoints', () => {
             .set(csrfHeader)
             .send({ redirectUrl: 'not-a-url' });
         
-        if (authCookie) {
-            req.set('Cookie', [csrfCookie, authCookie]);
-        } else {
-            req.set('Cookie', [csrfCookie]);
-        }
+        if (authCookie) req.set('Cookie', [csrfCookie, authCookie]);
+        else req.set('Cookie', [csrfCookie]);
 
         const res = await req;
-        // Validation should catch it
         expect(res.statusCode).toEqual(400);
     });
+
     it('should list URLs for the authenticated user without crashing', async () => {
         const req = request(app)
             .get('/api/urls')
             .set(csrfHeader);
 
-        if (authCookie) {
-            req.set('Cookie', [csrfCookie, authCookie]);
-        } else {
-            req.set('Cookie', [csrfCookie]);
-        }
+        if (authCookie) req.set('Cookie', [csrfCookie, authCookie]);
+        else req.set('Cookie', [csrfCookie]);
         const res = await req;
 
-        // A missing model static previously caused a 500 here; assert the
-        // actual success path and body shape, not just an acceptable status
-        // code, so a regression like Url.listForUser being removed again
-        // fails the test suite instead of passing silently.
         expect(res.statusCode).not.toBe(500);
 
         if (res.statusCode === 200) {
             expect(Array.isArray(res.body.links)).toBe(true);
         } else {
-            // Only acceptable non-200 outcome is an auth failure
             expect([401, 302]).toContain(res.statusCode);
         }
     });
@@ -118,11 +97,8 @@ describe('URL Controller Endpoints', () => {
             .delete('/api/urls/non-existent-id')
             .set(csrfHeader);
 
-        if (authCookie) {
-            req.set('Cookie', [csrfCookie, authCookie]);
-        } else {
-            req.set('Cookie', [csrfCookie]);
-        }
+        if (authCookie) req.set('Cookie', [csrfCookie, authCookie]);
+        else req.set('Cookie', [csrfCookie]);
 
         const res = await req;
         expect([200, 404, 401, 403]).toContain(res.statusCode);
@@ -133,30 +109,27 @@ describe('URL Controller Endpoints', () => {
             .get('/api/urls/analytics/non-existent-id')
             .set(csrfHeader);
 
-        if (authCookie) {
-            req.set('Cookie', [csrfCookie, authCookie]);
-        } else {
-            req.set('Cookie', [csrfCookie]);
-        }
+        if (authCookie) req.set('Cookie', [csrfCookie, authCookie]);
+        else req.set('Cookie', [csrfCookie]);
 
         const res = await req;
         expect([200, 404, 401, 403]).toContain(res.statusCode);
     });
 
-    it('should return 403 when unauthenticated user (req.user undefined) accesses analytics of a protected URL', async () => {
+    it('should return 403 when an authenticated user accesses another users analytics', async () => {
         const { handleGetAnalytics } = require('../../controller/url');
         const Url = require('../../model/url');
 
         jest.spyOn(Url, 'findOne').mockResolvedValueOnce({
             shortId: 'test1234',
-            userId: 'user123',
+            userId: 'owner123',
             totalClicks: 0,
             visitHistory: []
         });
 
         const req = {
             params: { shortId: 'test1234' },
-            user: undefined
+            user: { id: 'different-user' }
         };
         const res = {
             status: jest.fn().mockReturnThis(),
