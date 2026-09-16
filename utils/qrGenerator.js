@@ -1,6 +1,11 @@
 const QRCode = require('qrcode');
 const PDFDocument = require('pdfkit');
-const sharp = require('sharp');
+let sharp;
+try {
+    sharp = require('sharp');
+} catch (_) {
+    sharp = null;
+}
 const { assertSafePublicHttpUrl } = require('./ssrf');
 
 /**
@@ -165,6 +170,7 @@ async function generateSvg(qrDoc, baseUrl) {
  */
 async function compositeLogo(pngBuffer, logoUrl) {
     if (!logoUrl) return pngBuffer;
+    if (!sharp) throw new Error('QR image processing requires the optional sharp dependency.');
 
     try {
         await assertSafePublicHttpUrl(logoUrl);
@@ -218,6 +224,8 @@ async function compositeLogo(pngBuffer, logoUrl) {
  * @returns {Promise<Buffer>}
  */
 async function generatePng(qrDoc, baseUrl) {
+    if (!sharp) throw new Error('QR PNG generation requires the optional sharp dependency.');
+
     const design = qrDoc.design || {};
     const svg = await generateSvg(qrDoc, baseUrl);
     let pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
