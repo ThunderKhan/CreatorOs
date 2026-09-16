@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
-    "build": "npm run build:css && node --check index.js && node --check controller/auth.js && node --check routes/auth.js && node --check model/user.js && node --check notification.js && node --check controller/smartNotificationController.js && node --check routes/smartNotificationRoutes.js && node --check workers/contentPublishWorker.js && node --check services/dmQueueService.js && node --check controller/meetingController.js && node --check routes/meetingRoutes.js && node --check model/eventType.js && node --check model/meetingBooking.js && node --check services/googleCalendarService.js && node --check model/bioProfile.js && node --check routes/health.js && node --check public/js/sponsorshipMatchmaker.js && node --check controller/sponsorshipMatchmakerController.js && node --check routes/creatorCrmRoutes.js",
+    "build": "npm run build:css && node --check index.js && node --check controller/auth.js && node --check routes/auth.js && node --check model/user.js && node --check model/notification.js && node --check controller/smartNotificationController.js && node --check routes/smartNotificationRoutes.js && node --check workers/contentPublishWorker.js && node --check services/dmQueueService.js && node --check controller/meetingController.js && node --check routes/meetingRoutes.js && node --check model/eventType.js && node --check model/meetingBooking.js && node --check services/googleCalendarService.js && node --check model/bioProfile.js && node --check routes/health.js && node --check public/js/sponsorshipMatchmaker.js && node --check controller/sponsorshipMatchmakerController.js && node --check routes/creatorCrmRoutes.js",
     "seed:test-user": "node scripts/seedTestUser.js",
     "build:css": "tailwindcss -i ./public/css/input.css -o ./public/css/style.css --minify",
     "watch:css": "tailwindcss -i ./public/css/input.css -o ./public/css/style.css --watch",
@@ -40,7 +40,7 @@
     "multer": "^1.4.5-lts.1",
     "nanoid": "^3.3.8",
     "node-cron": "^4.2.1",
-    "nodemailer": "^8.0.8",
+    "nodemailer": "^8.0.0",
     "openai": "^4.52.7",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
