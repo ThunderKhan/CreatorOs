@@ -17,6 +17,7 @@ jest.mock('../../middleware/auth', () => ({
 
 jest.mock('../../middleware/rateLimiters', () => ({
     instagramProfileLimiter: (req, res, next) => next(),
+    instagramLimiter: (req, res, next) => next(),
 }));
 
 jest.mock('../../controller/instagramController', () => ({
