@@ -22,4 +22,8 @@ const dmTriggerSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
+// The worker filters by creator and active state for every inbound DM.
+// Keep that query index-backed rather than scanning the entire trigger collection.
+dmTriggerSchema.index({ creatorId: 1, isActive: 1 });
+
 module.exports = mongoose.models.DmTrigger || mongoose.model("DmTrigger", dmTriggerSchema);
