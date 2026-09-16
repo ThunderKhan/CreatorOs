@@ -16,8 +16,19 @@ jest.mock("../../utils/email", () => ({
   isEmailTransportConfigured: jest.fn().mockReturnValue(true)
 }));
 
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
+
 describe("Auth Middleware", () => {
   let req, res, next;
+
+  beforeAll(() => {
+    process.env.NODE_ENV = "production";
+  });
+
+  afterAll(() => {
+    if (ORIGINAL_NODE_ENV === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+  });
 
   beforeEach(() => {
     req = {
@@ -77,14 +88,11 @@ describe("Auth Middleware", () => {
     it("should reject unverified users", async () => {
       req.cookies.token = "valid_token";
       jwt.verify.mockReturnValue({ email: "unverified@example.com", role: "user" });
-      User.findOne.mockResolvedValue({ email: "unverified@example.com", isVerified: false });
-      process.env.NODE_ENV = "production";
-      wantsHtml.mockReturnValueOnce(true);
+      User.findOne.mockResolvedValue({ email: "unverified@example.com", isVerified: false, authProvider: "local" });
       
       await protect(req, res, next);
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.redirect).toHaveBeenCalledWith(expect.stringContaining("/resend-verification"));
-      process.env.NODE_ENV = "test";
     });
 
     it("should handle guest_contributor role", async () => {
@@ -101,12 +109,13 @@ describe("Auth Middleware", () => {
       req.cookies.token = "valid_token";
       jwt.verify.mockReturnValue({ id: "123", role: "guest_contributor" });
       ContributorSession.findOne.mockResolvedValue(null);
+      wantsHtml.mockReturnValueOnce(false);
 
       await protect(req, res, next);
       expect(res.status).toHaveBeenCalledWith(401);
     });
 
-    it("should redirect if User not found for HTML requests", async () => {
+    it("should redirect if User not found", async () => {
       req.cookies.token = "valid_token";
       jwt.verify.mockReturnValue({ email: "test@example.com", role: "user" });
       User.findOne.mockResolvedValue(null);
