@@ -1,13 +1,16 @@
 <%- include('partials/layout/header', {
-    activeNav: 'sponsorship-matchmaker',
-    title: 'Sponsorship Matchmaker'
+    activeNav: 'ai-assistant',
+    title: 'Sponsorship Matchmaker',
+    extraHead: '<meta name="csrf-token" content="<%= typeof csrfToken !== \'undefined\' ? csrfToken : \'\' %>">'
 }) %>
 
-<main class="content" style="padding: 2rem;">
+<div class="content" style="padding: 2rem;">
     <section class="panel-retro">
         <div id="sponsorship-matchmaker" aria-busy="true"></div>
     </section>
-</main>
+</div>
 
 <script src="/js/sponsorshipMatchmaker.js" nonce="<%= nonce %>"></script>
 <script src="/js/pages/sponsorship-matchmaker.js" nonce="<%= nonce %>"></script>
+
+<%- include('partials/layout/footer') %>
