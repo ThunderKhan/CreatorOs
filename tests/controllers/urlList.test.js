@@ -42,7 +42,11 @@ describe("URL list API pagination", () => {
 
     await handleListUserLinks(createRequest(), res);
 
-    expect(Url.listForUser).toHaveBeenCalledWith("user-id", { limit: 21, cursor: null });
+    expect(Url.listForUser).toHaveBeenCalledWith("user-id", {
+      limit: 21,
+      cursor: null,
+      includeArchived: false,
+    });
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       links: expect.arrayContaining([
         expect.objectContaining({ shortId: "link-0" }),
@@ -62,7 +66,11 @@ describe("URL list API pagination", () => {
 
     await handleListUserLinks(createRequest({ limit: "500", cursor: "cursor-1" }), res);
 
-    expect(Url.listForUser).toHaveBeenCalledWith("user-id", { limit: 101, cursor: "cursor-1" });
+    expect(Url.listForUser).toHaveBeenCalledWith("user-id", {
+      limit: 101,
+      cursor: "cursor-1",
+      includeArchived: false,
+    });
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
       pagination: {
         limit: 100,
