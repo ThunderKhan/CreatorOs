@@ -33,6 +33,7 @@ async function sendInstagramDM(recipientId, text, options = {}) {
     options.accessToken ||
     process.env.INSTAGRAM_PAGE_ACCESS_TOKEN ||
     process.env.INSTAGRAM_ACCESS_TOKEN;
+  const appId = options.appId || process.env.INSTAGRAM_APP_ID;
 
   if (!accessToken) {
     throw new Error(
@@ -46,7 +47,13 @@ async function sendInstagramDM(recipientId, text, options = {}) {
     );
   }
 
-  const url = `https://graph.instagram.com/v19.0/me/messages?access_token=${accessToken}`;
+  const url = "https://graph.facebook.com/v21.0/me/messages";
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${accessToken}`,
+  };
+  if (appId) headers["X-Ig-App-Id"] = appId;
+
   const payload = {
     recipient: { id: recipientId },
     message: { text },
@@ -54,7 +61,7 @@ async function sendInstagramDM(recipientId, text, options = {}) {
 
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(payload),
   });
 
@@ -75,12 +82,17 @@ async function sendInstagramDM(recipientId, text, options = {}) {
     const error = new Error(
       `Instagram DM Delivery Error (${statusCode}): ${message}`,
     );
-    error.code = statusCode;
+    error.status = statusCode;
+    error.code = errorData.error?.code || statusCode;
     error.apiError = errorData.error;
     throw error;
   }
 
-  return await response.json().catch(() => ({ success: true }));
+  const data = await response.json().catch(() => ({}));
+  return {
+    success: true,
+    messageId: data?.message_id || null,
+  };
 }
 
 function createRedisConnection(label) {
@@ -102,7 +114,7 @@ function createRedisConnection(label) {
 // Queue and Worker must use separate sockets: workers issue blocking commands
 // (BRPOP/BLPOP) that starve shared connections used for queue.add().
 if (REDIS_URI) {
-  const queueConnection = createRedisConnection("dm-queue");
+  const queueConnection = createRedisConnection('dm-queue');
 
   // Create the Queue only when Redis is explicitly configured.
   dmQueue = new Queue("dm-automation-queue", { connection: queueConnection });
@@ -113,7 +125,7 @@ if (REDIS_URI) {
       "📦 DM Worker disabled on Vercel to prevent hanging Redis connections. Use Vercel Cron/Webhooks instead.",
     );
   } else {
-    const workerConnection = createRedisConnection("dm-worker");
+    const workerConnection = createRedisConnection('dm-worker');
 
     dmWorker = new Worker(
       "dm-automation-queue",
@@ -213,4 +225,4 @@ if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
   console.log("📦 Upstash Redis REST client configured.");
 }
 
-module.exports = { dmQueue, sendInstagramDM };
+module.exports = { dmQueue, dmWorker, sendInstagramDM };
