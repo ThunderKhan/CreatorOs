@@ -27,14 +27,27 @@ router.get('/profile', protect, instagramProfileLimiter, getInstagramProfile);
 const DmTrigger = require('../model/dmTrigger');
 const asyncHandler = require('../utils/asyncHandler');
 const { validateDmTrigger } = require('../middleware/validators/instagramValidator');
+const { getMaxDmTriggersPerCreator } = require('../services/dmTriggerPolicy');
 
 router.get('/triggers', protect, instagramLimiter, asyncHandler(async (req, res) => {
     const triggers = await DmTrigger.find({ creatorId: req.user.id });
     res.json({ success: true, data: triggers });
 }));
 
-router.post('/triggers', protect, validateDmTrigger, asyncHandler(async (req, res) => {
+router.post('/triggers', protect, instagramLimiter, validateDmTrigger, asyncHandler(async (req, res) => {
     const { user_id, userId, ...safeBody } = req.body;
+    const maxTriggers = getMaxDmTriggersPerCreator();
+    const triggerCount = await DmTrigger.countDocuments({ creatorId: req.user.id });
+
+    if (triggerCount >= maxTriggers) {
+        return res.status(409).json({
+            success: false,
+            message: `DM trigger limit reached. A creator can have at most ${maxTriggers} triggers.`,
+            code: 'DM_TRIGGER_LIMIT_REACHED',
+            limit: maxTriggers,
+        });
+    }
+
     const trigger = await DmTrigger.create({ ...safeBody, creatorId: req.user.id });
     res.status(201).json({ success: true, data: trigger });
 }));
