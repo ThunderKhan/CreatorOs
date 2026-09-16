@@ -1,8 +1,7 @@
 const { Queue, Worker } = require("bullmq");
 const IORedis = require("ioredis");
 const Creator = require("../model/creator");
-const DmTrigger = require("../model/dmTrigger");
-const { getMaxDmTriggersPerCreator } = require("./dmTriggerPolicy");
+const { findActiveDmTriggers } = require("./dmTriggerMatcher");
 
 // BullMQ requires a standard Redis connection string (socket protocol).
 const REDIS_URI = process.env.REDIS_URI || process.env.REDIS_URL;
@@ -137,14 +136,8 @@ if (REDIS_URI) {
           }
 
           // Find an active trigger whose keyword appears in the message.
-          // Limit the result set so historical/unbounded trigger growth cannot
-          // turn every inbound DM into an unbounded memory scan.
-          const triggers = await DmTrigger.find({
-            creatorId: creator.userId,
-            isActive: true,
-          })
-            .limit(getMaxDmTriggersPerCreator())
-            .lean();
+          // The matcher applies the per-creator bound at the database query.
+          const triggers = await findActiveDmTriggers(creator.userId);
           const normalizedMessage = (message || "").toLowerCase();
           const matchedTrigger = triggers.find((t) =>
             normalizedMessage.includes(t.keyword),
@@ -165,11 +158,11 @@ if (REDIS_URI) {
           console.log(`[Worker] Successfully processed job ${job.id}`);
           return result;
         } catch (error) {
-          if (error.status === 429 || error.code === 429) {
-            console.warn(`[Worker] Rate limited on job ${job.id}. Will retry...`);
-            // Throwing the error tells BullMQ to retry the job based on backoff settings
-          }
-          throw error;
+            if (error.status === 429 || error.code === 429) {
+                console.warn(`[Worker] Rate limited on job ${job.id}. Will retry...`);
+                // Throwing the error tells BullMQ to retry the job based on backoff settings
+            }
+            throw error;
         }
       },
       {
