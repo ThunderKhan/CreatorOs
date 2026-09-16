@@ -78,10 +78,13 @@ describe("Auth Middleware", () => {
       req.cookies.token = "valid_token";
       jwt.verify.mockReturnValue({ email: "unverified@example.com", role: "user" });
       User.findOne.mockResolvedValue({ email: "unverified@example.com", isVerified: false });
+      process.env.NODE_ENV = "production";
+      wantsHtml.mockReturnValueOnce(true);
       
       await protect(req, res, next);
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.redirect).toHaveBeenCalledWith(expect.stringContaining("/resend-verification"));
+      process.env.NODE_ENV = "test";
     });
 
     it("should handle guest_contributor role", async () => {
@@ -103,10 +106,11 @@ describe("Auth Middleware", () => {
       expect(res.status).toHaveBeenCalledWith(401);
     });
 
-    it("should redirect if User not found", async () => {
+    it("should redirect if User not found for HTML requests", async () => {
       req.cookies.token = "valid_token";
       jwt.verify.mockReturnValue({ email: "test@example.com", role: "user" });
       User.findOne.mockResolvedValue(null);
+      wantsHtml.mockReturnValueOnce(true);
 
       await protect(req, res, next);
       expect(res.redirect).toHaveBeenCalledWith("/login");
