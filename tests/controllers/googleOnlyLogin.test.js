@@ -50,11 +50,13 @@ describe("Google-only password login (#979)", () => {
   });
 
   it("returns generic 401 instead of 500 when account has no password hash", async () => {
-    User.findOne.mockResolvedValue({
-      email: "googleonly@example.com",
-      authProvider: "google",
-      password: undefined,
-      isVerified: true,
+    User.findOne.mockReturnValue({
+      select: jest.fn().mockResolvedValue({
+        email: "googleonly@example.com",
+        authProvider: "google",
+        password: undefined,
+        isVerified: true,
+      }),
     });
 
     const compareSpy = jest.spyOn(bcrypt, "compare");
