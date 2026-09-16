@@ -23,6 +23,7 @@ const {
   getMediaKit,
   updateMediaKit,
 } = require("../controller/creatorCrmController");
+const { addSponsorshipRecommendationToCrm } = require("../controller/sponsorshipMatchmakerController");
 
 const {
   validateCrmQuery,
@@ -36,6 +37,9 @@ router.use(protect);
 
 // Combined feed
 router.get("/data", validateCrmQuery, getCrmData);
+
+// Sponsorship Matchmaker
+router.post("/sponsorship-matchmaker/outreach", addSponsorshipRecommendationToCrm);
 
 // Brands & Sponsors
 router.route("/brands").get(getBrands).post(validateBrand, createBrand);
@@ -55,6 +59,6 @@ router.route("/invoices/:id").put(validateInvoice, updateInvoice).delete(deleteI
 router.patch("/invoices/:id/paid", markInvoicePaid);
 
 // Media Kit
-router.route("/media-kit").get(getMediaKit).put(validateMediaKit, updateMediaKit);
+router.route("/media-kit").get(getMediaKit).put(updateMediaKit);
 
 module.exports = router;
