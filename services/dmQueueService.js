@@ -1,4 +1,4 @@
-const { Queue, Worker } = require("bullmq");
+const { Queue, Worker, UnrecoverableError } = require("bullmq");
 const IORedis = require("ioredis");
 const Creator = require("../model/creator");
 const DmTrigger = require("../model/dmTrigger");
@@ -8,6 +8,50 @@ const REDIS_URI = process.env.REDIS_URI || process.env.REDIS_URL;
 
 // Upstash REST credentials for other Redis clients (e.g., caching, rate-limiting).
 const { UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN } = process.env;
+
+const RETRYABLE_HTTP_MIN = 500;
+const RETRYABLE_HTTP_MAX = 599;
+const RETRYABLE_HTTP_STATUSES = new Set([408, 429]);
+
+function getHttpStatus(error) {
+  const status = Number(error?.status);
+  return Number.isInteger(status) ? status : null;
+}
+
+function isRetryableDmError(error) {
+  const status = getHttpStatus(error);
+
+  if (status === null) {
+    // Network errors, DNS failures, connection resets and other transport
+    // failures are transient unless a caller explicitly classifies them.
+    return true;
+  }
+
+  if (RETRYABLE_HTTP_STATUSES.has(status)) {
+    return true;
+  }
+
+  if (status >= RETRYABLE_HTTP_MIN && status <= RETRYABLE_HTTP_MAX) {
+    return true;
+  }
+
+  // Other 4xx responses represent permanent request/authentication/permission
+  // failures and should not consume BullMQ retry attempts.
+  return status < 400 || status >= 600;
+}
+
+function toUnrecoverableDmError(error) {
+  const message = error?.message || "Instagram DM delivery failed permanently.";
+  const unrecoverableError = new UnrecoverableError(message);
+
+  if (error && typeof error === "object") {
+    if (error.status !== undefined) unrecoverableError.status = error.status;
+    if (error.code !== undefined) unrecoverableError.code = error.code;
+    if (error.apiError !== undefined) unrecoverableError.apiError = error.apiError;
+  }
+
+  return unrecoverableError;
+}
 
 function createFallbackQueue() {
   return {
@@ -75,7 +119,7 @@ async function sendInstagramDM(recipientId, text, options = {}) {
     const error = new Error(
       `Instagram DM Delivery Error (${statusCode}): ${message}`,
     );
-    error.code = statusCode;
+    error.status = statusCode;
     error.apiError = errorData.error;
     throw error;
   }
@@ -160,11 +204,17 @@ if (REDIS_URI) {
           console.log(`[Worker] Successfully processed job ${job.id}`);
           return result;
         } catch (error) {
-            if (error.status === 429 || error.code === 429) {
-                console.warn(`[Worker] Rate limited on job ${job.id}. Will retry...`);
-                // Throwing the error tells BullMQ to retry the job based on backoff settings
-            }
+          if (isRetryableDmError(error)) {
+            console.warn(
+              `[Worker] Transient DM delivery failure on job ${job.id}. Will retry...`,
+            );
             throw error;
+          }
+
+          console.warn(
+            `[Worker] Permanent DM delivery failure on job ${job.id}. Skipping retries.`,
+          );
+          throw toUnrecoverableDmError(error);
         }
       },
       {
@@ -211,51 +261,4 @@ if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
   console.log("📦 Upstash Redis REST client configured.");
 }
 
-async function sendInstagramDM(recipientId, text) {
-    const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
-    const appId = process.env.INSTAGRAM_APP_ID;
-
-    // No OAuth/token flow is configured yet. Never silently "deliver" a DM that
-    // was not sent: surface a clear error so jobs fail loudly instead.
-    if (!accessToken || !appId) {
-        const error = new Error(
-            'Instagram DM automation is not configured: INSTAGRAM_APP_ID and INSTAGRAM_ACCESS_TOKEN are required.'
-        );
-        error.code = 'DM_NOT_CONFIGURED';
-        throw error;
-    }
-
-    const response = await fetch('https://graph.facebook.com/v21.0/me/messages', {
-        method: 'POST',
-        headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-            'X-Ig-App-Id': appId,
-        },
-        body: JSON.stringify({
-            recipient: { id: recipientId },
-            messaging_type: 'RESPONSE',
-            message: { text },
-        }),
-    });
-
-    if (!response.ok) {
-        const errBody = await response.text();
-        const error = new Error(`Instagram DM send failed: ${response.status} - ${errBody}`);
-        error.status = response.status;
-        try {
-            const parsed = JSON.parse(errBody);
-            if (parsed?.error?.code) {
-                error.code = parsed.error.code;
-            }
-        } catch (e) {
-            // Non-JSON error body; the HTTP status is preserved above.
-        }
-        throw error;
-    }
-
-    const data = await response.json();
-    return { success: true, messageId: data?.message_id || null };
-}
-
-module.exports = { dmQueue, sendInstagramDM };
+module.exports = { dmQueue, sendInstagramDM, isRetryableDmError };
