@@ -144,15 +144,23 @@ if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
 }
 
 async function sendInstagramDM(recipientId, text, options = {}) {
-  const accessToken = options.accessToken || process.env.INSTAGRAM_ACCESS_TOKEN;
+  const accessToken = options.accessToken;
   const appId = process.env.INSTAGRAM_APP_ID;
   const timeoutMs = options.timeoutMs ?? DEFAULT_DM_REQUEST_TIMEOUT_MS;
 
-  if (!accessToken || !appId) {
+  if (!appId) {
     const error = new Error(
-      "Instagram DM automation is not configured: INSTAGRAM_APP_ID and INSTAGRAM_ACCESS_TOKEN are required.",
+      "Instagram DM automation is not configured: INSTAGRAM_APP_ID is required.",
     );
     error.code = "DM_NOT_CONFIGURED";
+    throw error;
+  }
+
+  if (!accessToken) {
+    const error = new Error(
+      "Instagram creator access token is required for outbound DM delivery.",
+    );
+    error.code = "DM_CREDENTIAL_MISSING";
     throw error;
   }
 
